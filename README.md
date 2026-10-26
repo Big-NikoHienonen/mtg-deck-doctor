@@ -85,6 +85,40 @@ Check the front end's types and lint:
 cd frontend && npx tsc -b && npm run lint
 ```
 
+## Evals
+
+The stubbed tests can't catch a model that behaves differently after a prompt change. The evals run the real thing instead. `evals/commander_rounds.py` plays a fixed list of briefs through the commander rounds, some with scripted follow-ups (reject a commander with a reason, like one, take a fact back, change the colors), and checks what each round offers.
+
+**Each run costs API money.** It calls the real model, Scryfall, and EDHREC. Nothing runs it for you: it isn't part of the tests or CI. Run it after you change a prompt in `tool_loop.py` or the commander rounds in `deck_builder.py`. A full run makes about 30 model calls (roughly 85,000 input and 15,000 output tokens) and takes about two minutes.
+
+```bash
+uv run python evals/commander_rounds.py
+```
+
+The script reads `ANTHROPIC_API_KEY` and `ANTHROPIC_MODEL` from `.env`. It writes builds to a temporary directory, so `data/builds/` stays as it is. It shares the Scryfall and EDHREC caches under `data/` with the app.
+
+| Flag | Description |
+| --- | --- |
+| `--only CASE [CASE ...]` | Runs only the named cases. Use it to keep a run cheap while you iterate. |
+| `--timeout SECONDS` | Sets the time limit for one round. Defaults to 120. |
+| `--workers N` | Sets how many cases run at once. Defaults to 4. |
+| `--verbose` | Prints each round's facts and offered commanders. |
+
+Each round gets these checks:
+
+| Check | Passes when |
+| --- | --- |
+| `runs` | The round finishes without an error and leaves the build at the commander stage. |
+| `colors` | The brief, the player's words, or the facts fix the colors, and every offered commander has exactly that color identity. |
+| `rejects` | A rejected commander doesn't come back. |
+| `facts` | There are at most 8 facts of at most 80 characters, none of them filler such as "colours open" or "no budget", and none naming a color, budget, or power level the player never mentioned. |
+| `options` | At least 2 commanders are offered, and each one's `fits` and `misses` come only from the facts. |
+| `time` | The round finishes within the time limit. |
+
+The script prints each round as it finishes, then the offending values for every failed check, then a table of cases by check. It exits with 1 if any check failed. A check that doesn't apply to a round shows as `-`.
+
+To add a case, append a `Case` to `CASES` in the script. Give it the brief's text, any form answers, the colors the brief fixes, and the follow-up `Step`s.
+
 ## Project layout
 
 | Path | Contents |
@@ -99,6 +133,7 @@ cd frontend && npx tsc -b && npm run lint
 | `frontend/src/DeckView.tsx` | The deck page. |
 | `context/` | Notes the model reads. |
 | `tests/` | The test suite. |
+| `evals/` | Live evals that call the real model. They cost API money. |
 
 ## Data
 
