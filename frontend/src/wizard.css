@@ -1,0 +1,313 @@
+/* The new-deck page: a short column of optional controls beside a sticky
+   "your brief" panel that holds the prompt and the Build button. Colors come
+   from the app's variables (index.css); this file only adds layout and the
+   few controls the rest of the app doesn't have. */
+
+.wiz-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 28px;
+  align-items: start;
+}
+
+.wiz-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.wiz-side {
+  position: sticky;
+  top: 20px;
+}
+
+@media (max-width: 860px) {
+  .wiz-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .wiz-side {
+    position: static;
+  }
+}
+
+.wiz-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 20px;
+}
+
+.wiz-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.wiz-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.wiz-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+/* A row of exclusive choices, one pressed. */
+.seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.seg button {
+  flex: 1 1 auto;
+  font: inherit;
+  font-size: 14px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.seg button:hover:not(:disabled):not([aria-pressed="true"]) {
+  background: var(--user-bubble);
+  color: var(--text);
+}
+
+.seg button[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(43, 32, 24, 0.22);
+}
+
+.seg button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.seg-sm button {
+  font-size: 13px;
+  padding: 5px 10px;
+}
+
+/* A mana symbol you can switch on. */
+.mana {
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+  opacity: 0.45;
+  transition: opacity 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+}
+
+.mana img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.mana:hover {
+  opacity: 0.8;
+}
+
+.mana[aria-pressed="true"] {
+  opacity: 1;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(122, 46, 46, 0.16);
+  transform: scale(1.06);
+}
+
+@media (max-width: 480px) {
+  .mana {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+.mana-c {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  border: 2px dashed var(--border);
+  background: var(--bg);
+}
+
+.mana-c[aria-pressed="true"] {
+  color: var(--text);
+  border-style: solid;
+}
+
+.chip {
+  font: inherit;
+  font-size: 14px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.chip:hover:not(:disabled):not([aria-pressed="true"]) {
+  background: var(--user-bubble);
+  border-color: var(--accent-gold);
+}
+
+.chip[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--surface);
+}
+
+.chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.chip small {
+  opacity: 0.7;
+  margin-left: 5px;
+  font-size: 11px;
+}
+
+/* A summary chip in the brief: what's decided, with a way to undo it. */
+.brief-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 13px;
+  padding: 3px 6px 3px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.brief-chip:hover {
+  border-color: var(--danger);
+}
+
+.brief-chip span {
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.switch {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  background: none;
+  border: 0;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.switch-track {
+  position: relative;
+  flex: none;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--border);
+  transition: background-color 150ms ease;
+}
+
+.switch-track::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(43, 32, 24, 0.3);
+  transition: transform 150ms ease;
+}
+
+.switch[aria-checked="true"] .switch-track {
+  background: var(--accent);
+}
+
+.switch[aria-checked="true"] .switch-track::after {
+  transform: translateX(16px);
+}
+
+.wiz-details > summary {
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--accent);
+  list-style: none;
+}
+
+.wiz-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.wiz-details > summary::before {
+  content: "▸";
+  display: inline-block;
+  width: 14px;
+  transition: transform 120ms ease;
+}
+
+.wiz-details[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+/* The Doctor's progress: stages done, and the one it is on. */
+.stage {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 1.9;
+  color: var(--text-muted);
+}
+
+.stage[data-now="true"] {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.stage-dot {
+  flex: none;
+  width: 16px;
+  text-align: center;
+  color: var(--positive);
+}
+
+.stage[data-now="true"] .stage-dot {
+  color: var(--accent-gold);
+  animation: pulse 1.2s ease-in-out infinite;
+}

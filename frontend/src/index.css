@@ -1,0 +1,186 @@
+@import url("https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=Source+Serif+4:ital@1&display=swap");
+
+:root {
+  --bg: #efe6d3;
+  --surface: #f7f0de;
+  --border: #c9b98f;
+  --text: #2b2018;
+  --text-muted: #5a4a34;
+  --accent: #7a2e2e;
+  --accent-gold: #b08c3e;
+  --user-bubble: #e3d6b4;
+  /* Brighter, more saturated than --accent (the muted oxblood used for
+     links/active-tab text elsewhere) — reserved for destructive-action
+     buttons, which need to actually read as "red", not just accented. */
+  --danger: #c0392b;
+  /* The counterpart to --danger: a card being added, a swap being applied. */
+  --positive: #3b7d3a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Source Serif 4", serif;
+}
+
+#root {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+}
+
+/* Shared button look + interaction feedback (pair with buttonStyle in
+   styles.ts, which only carries layout properties) — rest-state
+   background/color/border live here, not inline, so hover/active can
+   actually change them; an inline style on the same property always wins
+   over a stylesheet rule otherwise, pseudo-classes included. */
+.btn {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  transition: background-color 120ms ease, border-color 120ms ease, filter 80ms ease;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--user-bubble);
+  border-color: var(--accent-gold);
+}
+
+.btn:active:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+.btn:disabled {
+  opacity: 0.65;
+}
+
+/* Destructive actions (remove/delete) — red at rest, filled red on hover. */
+.btn-danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--danger);
+  color: var(--surface);
+  border-color: var(--danger);
+}
+
+.btn-danger:active:not(:disabled) {
+  filter: brightness(0.85);
+}
+
+/* The affirmative action (apply a swap) — green and filled at rest, since
+   it's the one button on a swap panel that should draw the eye. */
+.btn-positive {
+  background: var(--positive);
+  border-color: var(--positive);
+  color: #fff;
+}
+
+.btn-positive:hover:not(:disabled) {
+  background: #2f6a2e;
+  border-color: #2f6a2e;
+}
+
+/* Hover affordance only — the zoomed-in view itself lives in the single
+   sticky CardPreview panel (see CardPreview.tsx), not on the card itself.
+   An earlier per-card hover-zoom + floating button panel fought the DOM
+   (the zoomed card and its buttons lived in different hit-test regions,
+   reaching one from the other was unreliable) — this is deliberately
+   just a subtle highlight, no transform, no geometry math. */
+.card-tile,
+.card-row {
+  cursor: pointer;
+  transition: box-shadow 120ms ease, border-color 120ms ease;
+}
+
+.card-tile:hover img {
+  /* box-shadow, not border-color — the border itself is set inline on the
+     <img> (border: 1px solid var(--border)), and inline styles always win
+     over an external stylesheet rule for the same property. */
+  box-shadow: 0 0 0 2px var(--accent-gold);
+}
+
+.card-row:hover {
+  background: var(--surface);
+}
+
+/* Flat list-style actions inside a dropdown menu (DeckMenu) — no
+   individual border per item, since bordering every row inside an
+   already-bordered panel reads as boxes nested in a box. An item is
+   told apart from its neighbors by hover background alone. */
+.menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--text);
+  transition: background-color 120ms ease;
+}
+
+.menu-item:hover:not(:disabled) {
+  background: var(--user-bubble);
+}
+
+.menu-item:active:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+.menu-item:disabled {
+  opacity: 0.65;
+}
+
+.menu-item-danger {
+  color: var(--danger);
+}
+
+.menu-item-danger:hover:not(:disabled) {
+  background: var(--danger);
+  color: var(--surface);
+}
+
+.deck-title {
+  position: relative;
+  display: block;
+  width: fit-content;
+}
+
+.deck-title .rename-hint {
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: 10px;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 400;
+  font-style: italic;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity 120ms ease;
+  pointer-events: none;
+}
+
+.deck-title:hover .rename-hint {
+  opacity: 1;
+}
+
+/* The Doctor's review is under way: placeholders pulse softly where the
+   swaps will appear. */
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
