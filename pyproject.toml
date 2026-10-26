@@ -1,7 +1,7 @@
 [project]
 name = "mtg-deck-doctor"
 version = "0.1.0"
-description = "Add your description here"
+description = "AI-assisted Commander deck builder and tuner. Describe a deck and the Doctor finds a commander in rounds, then builds the 99 phase by phase from EDHREC data, with budget and power-level limits enforced in code. Also analyzes existing decks and suggests cuts and swaps."
 authors = [
     { name = "Niko Hienonen", email = "niko.hienonen@futurice.com" }
 ]
