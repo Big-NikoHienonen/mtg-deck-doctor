@@ -3,11 +3,17 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
+import ThemePicker from './ThemePicker.tsx'
+import { applyStoredTheme } from './themes.ts'
+
+// The saved theme goes on before anything is drawn, so a page never flashes in the wrong look.
+applyStoredTheme()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <App />
+      <ThemePicker />
     </BrowserRouter>
   </StrictMode>,
 )

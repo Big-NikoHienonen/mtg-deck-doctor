@@ -827,6 +827,11 @@ export type CardInfo = {
   // "banned" | "restricted".
   legality: string | null;
   oracleText: string | null;
+  // Colors the card's identity includes, as WUBRG letters.
+  colorIdentity?: string[];
+  // "{2}{U}{B}"; empty for a land. Absent on cards cached before it was recorded.
+  manaCost?: string | null;
+  cmc?: number | null;
 };
 
 // Used to bucket the ledger by card type (Creatures/Instants/Lands/...), to

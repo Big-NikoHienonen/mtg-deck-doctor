@@ -1,0 +1,1001 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+/* Each theme's title face. */
+@import url("https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=Marcellus&family=Rajdhani:wght@700&display=swap");
+@import "mana-font/css/mana.min.css";
+
+/* The deck page: a wide, full-bleed layout in the manner of Moxfield's deck view —
+   a hero with the commander's art, an action bar, a sticky card preview beside a
+   multi-column list, and a fixed bar of totals along the bottom. Everything is scoped
+   to .dv; the app's colors come from the tokens in index.css. */
+
+/* What a theme (themes.ts) sets, with the default look until one is applied. */
+:root {
+  --on-accent: #ffffff;
+  --dv-hero-a: #2e1214;
+  --dv-hero-b: #43181a;
+  --dv-hero-c: #5f2626;
+  --dv-title-font: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --dv-title-weight: 700;
+  --dv-title-spacing: -0.01em;
+}
+
+#root.dv-wide {
+  max-width: none;
+  padding: 0 0 88px;
+}
+
+.dv {
+  --dv-line: color-mix(in srgb, var(--text-muted) 32%, transparent);
+  --dv-spells: color-mix(in srgb, var(--text-muted) 55%, var(--bg));
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  font-size: 14px;
+  line-height: 21px;
+  color: var(--text);
+}
+
+.dv button,
+.dv input,
+.dv select {
+  font-family: inherit;
+}
+
+.dv-container {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 40px;
+}
+
+@media (max-width: 640px) {
+  .dv-container {
+    padding: 0 16px;
+  }
+
+  .dv-title,
+  .dv-title-input {
+    font-size: 30px;
+  }
+
+  .dv-hero-body {
+    min-height: 0;
+  }
+
+  .dv-sep {
+    display: none;
+  }
+}
+
+/* ---- hero ---- */
+
+.dv-hero {
+  position: relative;
+  overflow: hidden;
+  color: #fff;
+  background: linear-gradient(110deg, var(--dv-hero-a) 0%, var(--dv-hero-b) 50%, var(--dv-hero-c) 100%);
+}
+
+.dv-hero-art {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 55%;
+  background-size: cover;
+  background-position: center 22%;
+}
+
+.dv-hero-art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, var(--dv-hero-b) 0%, color-mix(in srgb, var(--dv-hero-b) 55%, transparent) 35%, transparent 100%);
+}
+
+.dv-hero-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding-top: 22px;
+  padding-bottom: 24px;
+  min-height: 294px;
+}
+
+.dv-back {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.75);
+  text-decoration: none;
+}
+
+.dv-back:hover {
+  color: #fff;
+}
+
+.dv-owner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 500;
+  color: rgba(255, 236, 214, 0.9);
+}
+
+.dv-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-size: cover;
+  background-position: center 25%;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.dv-spacer {
+  flex: 1;
+}
+
+.dv-title {
+  margin: 0;
+  max-width: 920px;
+  font-family: var(--dv-title-font);
+  font-size: 44px;
+  line-height: 1.1;
+  font-weight: var(--dv-title-weight);
+  letter-spacing: var(--dv-title-spacing);
+}
+
+.dv-title-edit {
+  cursor: pointer;
+}
+
+.dv-title-edit .dv-rename {
+  margin-left: 12px;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: rgba(255, 255, 255, 0.6);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.dv-title-edit:hover .dv-rename {
+  opacity: 1;
+}
+
+.dv-title-input {
+  width: 100%;
+  max-width: 920px;
+  font-family: var(--dv-title-font);
+  font-size: 44px;
+  line-height: 1.1;
+  font-weight: var(--dv-title-weight);
+  color: #fff;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid #fff;
+  padding: 0;
+  outline: 0;
+}
+
+.dv-badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dv-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 17px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.dv-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 22px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.dv-meta .dv-warn {
+  color: #ffb4a8;
+}
+
+/* ---- action bar ---- */
+
+.dv-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  padding: 16px 0 6px;
+}
+
+.dv-actions .dv-grow {
+  flex: 1;
+}
+
+.dv-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 1px;
+  background: none;
+  border: 0;
+  font-size: 14px;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.dv-action:hover {
+  color: var(--accent);
+}
+
+.dv-action[aria-selected="true"] {
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.dv-action .dv-count {
+  color: var(--accent-gold);
+  font-weight: 600;
+}
+
+.dv-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--dv-line);
+}
+
+/* ---- the deck: sticky preview beside the list ---- */
+
+.dv-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  padding-top: 8px;
+}
+
+.dv-side {
+  position: sticky;
+  top: 16px;
+  flex: none;
+  width: 251px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dv-side img,
+.dv-side .dv-blank {
+  display: block;
+  width: 100%;
+  border-radius: 4.5% / 3.2%;
+}
+
+.dv-side img {
+  box-shadow: 0 6px 18px rgba(43, 32, 24, 0.3);
+}
+
+.dv-side .dv-blank {
+  aspect-ratio: 488 / 680;
+  border: 1px dashed var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.dv-price-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.dv-price-line .dv-muted {
+  color: var(--text-muted);
+}
+
+.dv-buy {
+  width: 100%;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.dv-buy:hover {
+  border-color: var(--accent-gold);
+  background: var(--user-bubble);
+}
+
+.dv-buy[data-primary="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.dv-buy[data-primary="true"]:hover {
+  filter: brightness(1.12);
+}
+
+@media (max-width: 860px) {
+  .dv-side {
+    display: none;
+  }
+}
+
+.dv-content {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---- view, group and sort ---- */
+
+/* The card search box brings its own sizes; here it sits level with the selects. */
+.dv .dv-add input {
+  height: 34px;
+  padding: 0 12px !important;
+  font-size: 14px !important;
+}
+
+.dv .dv-add button {
+  height: 34px;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  font-size: 14px !important;
+}
+
+.dv-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  margin-bottom: 18px;
+}
+
+.dv-controls .dv-add {
+  flex: 1 1 320px;
+  max-width: 460px;
+}
+
+/* The view, group and sort fields sit at the right. */
+.dv-controls .dv-add + .dv-field {
+  margin-left: auto;
+}
+
+.dv-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+}
+
+.dv-select {
+  height: 34px;
+  padding: 0 30px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background-color: var(--surface);
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%), linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
+  background-size: 5px 5px, 5px 5px;
+  background-position: calc(100% - 15px) 14px, calc(100% - 10px) 14px;
+  background-repeat: no-repeat;
+  color: var(--text);
+  font-size: 14px;
+  appearance: none;
+  cursor: pointer;
+}
+
+.dv-select:hover,
+.dv-select:focus {
+  border-color: var(--accent-gold);
+  outline: 0;
+}
+
+.dv-advanced {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  margin: -6px 0 18px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 13px;
+}
+
+.dv-advanced label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+}
+
+/* ---- the text views ---- */
+
+.dv-cols {
+  column-count: 3;
+  column-gap: 28px;
+}
+
+@media (max-width: 1180px) {
+  .dv-cols {
+    column-count: 2;
+  }
+}
+
+@media (max-width: 760px) {
+  .dv-cols {
+    column-count: 1;
+  }
+}
+
+.dv-cat {
+  display: flex;
+  flex-direction: column;
+  margin: 0 0 18px;
+  padding: 0;
+  list-style: none;
+  break-inside: avoid;
+}
+
+.dv-cat-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  border-bottom: 2px solid var(--dv-line);
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+}
+
+.dv-cat-head .ms {
+  width: 1.3em;
+  text-align: center;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.dv-cat-head .dv-total {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.dv-cat-head .dv-caret {
+  font-size: 10px;
+  color: var(--text-muted);
+  transition: transform 120ms ease;
+}
+
+.dv-cat[data-collapsed="true"] .dv-caret {
+  transform: rotate(-90deg);
+}
+
+.dv-row {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 0;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.dv-row:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.dv-row:hover .dv-name {
+  text-decoration: underline;
+}
+
+.dv-condensed .dv-row {
+  padding: 0;
+}
+
+.dv-qty {
+  flex: none;
+  width: 24px;
+  text-align: right;
+  color: var(--text-muted);
+}
+
+.dv-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.dv-unknown {
+  color: var(--text-muted);
+}
+
+.dv-cost {
+  flex: none;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.dv-cost .ms {
+  margin-left: 1px;
+  font-size: 12.1px;
+}
+
+.dv-price {
+  flex: none;
+  min-width: 46px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.dv-act-space {
+  flex: none;
+  width: 22px;
+}
+
+.dv [data-static="true"] {
+  cursor: default;
+}
+
+.dv-row[data-static="true"]:hover {
+  background: none;
+}
+
+.dv-row[data-static="true"]:hover .dv-name {
+  text-decoration: none;
+}
+
+.dv-act {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-top: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: none;
+  font-size: 9px;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0.55;
+}
+
+.dv-row:hover .dv-act,
+.dv-act[aria-expanded="true"] {
+  opacity: 1;
+}
+
+.dv-act:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.dv-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 25;
+  min-width: 160px;
+  margin-top: 2px;
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 22px rgba(43, 32, 24, 0.22);
+  cursor: default;
+}
+
+.dv-menu button {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  text-align: left;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.dv-menu button:hover:not(:disabled) {
+  background: var(--user-bubble);
+}
+
+.dv-menu button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.dv-menu .dv-danger {
+  color: var(--danger);
+}
+
+.dv-owned {
+  flex: none;
+  color: var(--positive);
+  font-size: 12px;
+}
+
+/* ---- the visual views ---- */
+
+.dv-visual-group {
+  margin-bottom: 22px;
+}
+
+.dv-visual-group .dv-cat-head {
+  margin-bottom: 10px;
+}
+
+.dv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.dv-tile {
+  position: relative;
+  cursor: pointer;
+}
+
+.dv-tile img,
+.dv-tile .dv-blank-card {
+  display: block;
+  width: 100%;
+  border-radius: 4.5% / 3.2%;
+  box-shadow: 0 2px 6px rgba(43, 32, 24, 0.3);
+}
+
+.dv-tile .dv-blank-card {
+  aspect-ratio: 488 / 680;
+  background: var(--surface);
+}
+
+.dv-qty-badge {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  padding: 0 7px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dv-stacks {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+}
+
+.dv-stack {
+  flex: none;
+  width: 178px;
+}
+
+.dv-stack-card {
+  position: relative;
+  height: 26px;
+  overflow: hidden;
+  border-radius: 4.5% / 3.2%;
+  cursor: pointer;
+  transition: height 140ms ease;
+}
+
+.dv-stack-card + .dv-stack-card {
+  margin-top: 2px;
+}
+
+.dv-stack-card:hover,
+.dv-stack-card:last-child {
+  height: 248px;
+}
+
+.dv-stack-card img,
+.dv-stack-card .dv-blank-card {
+  display: block;
+  width: 100%;
+  border-radius: 4.5% / 3.2%;
+  box-shadow: 0 1px 4px rgba(43, 32, 24, 0.35);
+}
+
+.dv-stack-card .dv-blank-card {
+  aspect-ratio: 488 / 680;
+  background: var(--surface);
+}
+
+.dv-stack-card .dv-qty-badge {
+  top: 4px;
+  right: 6px;
+  bottom: auto;
+  left: auto;
+}
+
+/* ---- the bar along the bottom ---- */
+
+.dv-footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  height: 57px;
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  padding: 0 40px;
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.25);
+}
+
+.dv-footer .dv-total {
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.dv-footer .dv-total strong {
+  font-size: 13px;
+}
+
+.dv-footer .dv-format {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+.dv-footer .dv-worth {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.dv-footer .dv-types {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-size: 13px;
+}
+
+.dv-footer .dv-type {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: default;
+  outline-offset: 4px;
+}
+
+/* A tooltip that appears at once, above the bar, for the count of each type. */
+.dv-footer .dv-type::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 14px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 90ms ease;
+}
+
+/* The last one would run off the right edge, so its tooltip lines up with it. */
+.dv-footer .dv-type:last-child::after {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+.dv-footer .dv-type:hover::after,
+.dv-footer .dv-type:focus-visible::after {
+  opacity: 1;
+}
+
+@media (max-width: 900px) {
+  .dv-footer .dv-types,
+  .dv-footer .dv-format {
+    display: none;
+  }
+  .dv-footer {
+    padding: 0 16px;
+  }
+}
+
+/* ---- the numbers under the list ---- */
+
+.dv-stats {
+  margin-top: 36px;
+  padding-top: 24px;
+  border-top: 1px solid var(--dv-line);
+}
+
+.dv-stats h2 {
+  margin: 0 0 14px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.dv-stats-row {
+  display: flex;
+  gap: 36px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.dv-curve {
+  flex: 1 1 420px;
+  max-width: 560px;
+}
+
+.dv-curve-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 160px;
+  padding: 0 4px;
+  border-bottom: 1px solid var(--dv-line);
+}
+
+.dv-curve-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: 100%;
+  position: relative;
+}
+
+.dv-curve-col .dv-bar-permanents {
+  background: var(--accent);
+}
+
+.dv-curve-col .dv-bar-spells {
+  background: var(--dv-spells);
+}
+
+.dv-curve-col .dv-bar-n {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.dv-curve-axis {
+  display: flex;
+  gap: 8px;
+  padding: 4px 4px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.dv-curve-axis span {
+  flex: 1;
+  text-align: center;
+}
+
+.dv-legend {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.dv-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 5px;
+  border-radius: 2px;
+}
+
+.dv-averages {
+  flex: 1 1 300px;
+  max-width: 420px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.dv-averages strong {
+  color: var(--text);
+}
+
+.dv-colors {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 28px;
+  text-align: center;
+}
+
+.dv-colors .ms {
+  font-size: 38px;
+}
+
+.dv-colors .dv-share {
+  margin-top: 4px;
+  font-size: 28px;
+  line-height: 1.1;
+  font-weight: 500;
+}
+
+.dv-colors .dv-symbols {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.dv-colors [data-zero="true"] {
+  opacity: 0.35;
+}
+
+@media (max-width: 640px) {
+  .dv-colors {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* The other tabs keep a reading width. */
+.dv-narrow {
+  max-width: 980px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-top: 8px;
+}

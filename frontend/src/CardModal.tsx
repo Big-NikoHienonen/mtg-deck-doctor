@@ -128,6 +128,15 @@ export default function CardModal({
     }
   }
 
+  // Escape closes the card, from anywhere on the page.
+  useEffect(() => {
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [onClose]);
+
   // Left/Right only navigate when focus isn't in a text/number field —
   // otherwise this would hijack ordinary cursor movement inside the "Add
   // more" quantity input.

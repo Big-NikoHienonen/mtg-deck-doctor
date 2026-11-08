@@ -95,8 +95,8 @@ export default function DeckMenu({
 
   return (
     <div ref={ref} style={{ position: "relative" }}>
-      <button onClick={toggle} aria-label="Deck menu" title="Deck menu" className="btn" style={{ ...buttonStyle, padding: "4px 10px" }}>
-        &#8942;
+      <button onClick={toggle} aria-label="Deck menu" title="Deck menu" aria-expanded={open} className="dv-action">
+        &#8942; More
       </button>
       {open && (
         <div

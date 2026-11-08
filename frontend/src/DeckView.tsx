@@ -22,22 +22,26 @@ import {
   type CommanderIncludes,
   type Deck,
 } from "./api";
-import { CATEGORY_ORDER, categoryFor } from "./cardCategories";
 import { useAiProblem } from "./aiStatus";
 import AiNotice, { useSecondsUntil } from "./AiNotice";
-import CardImage from "./CardImage";
 import CardModal from "./CardModal";
 import CardPreview from "./CardPreview";
 import CardSearchBox from "./CardSearchBox";
 import CutSuggestions from "./CutSuggestions";
 import { replacementPool } from "./cutRanking";
+import DeckControls, { type ListSettings } from "./DeckControls";
+import DeckFooter from "./DeckFooter";
 import DeckHealthPanel from "./DeckHealthPanel";
+import DeckHero from "./DeckHero";
+import DeckList from "./DeckList";
+import DeckSidebar from "./DeckSidebar";
+import DeckStats from "./DeckStats";
+import { GROUP_LABELS, SORT_LABELS, VIEW_LABELS, buildRows, deckStats, groupRows } from "./deckListModel";
 import { analyzeDeck } from "./deckHealth";
 import DeckMenu from "./DeckMenu";
 import ExportDecklistModal from "./ExportDecklistModal";
 import { buildDecklistText } from "./importExport";
 import ImportCardsModal from "./ImportCardsModal";
-import ManaPips from "./ManaPips";
 import {
   clearSelectedPrinting,
   loadSelectedPrintings,
@@ -47,120 +51,35 @@ import {
 import Recommendations from "./Recommendations";
 import TopIncludes from "./TopIncludes";
 import { buttonStyle, eyebrowStyle, inputStyle } from "./styles";
-
-function CardTile({
-  name,
-  cardId,
-  count,
-  printing,
-  onHover,
-  onOpen,
-}: {
-  name: string;
-  cardId: string | null | undefined;
-  count: number;
-  printing: SelectedPrinting | undefined;
-  onHover: () => void;
-  onOpen: () => void;
-}) {
-  return (
-    <div className="card-tile" onMouseEnter={onHover} onClick={onOpen} style={{ position: "relative" }}>
-      <CardImage
-        cardId={cardId}
-        printing={printing}
-        version="normal"
-        alt={name}
-        title={name}
-        loading="lazy"
-        style={{ width: "100%", display: "block", borderRadius: 8, border: "1px solid var(--border)" }}
-      />
-      {count > 1 && (
-        <div
-          style={{
-            position: "absolute",
-            bottom: 6,
-            left: 6,
-            padding: "1px 7px",
-            borderRadius: 10,
-            background: "rgba(0, 0, 0, 0.65)",
-            color: "#fff",
-            fontSize: 12,
-            fontWeight: 600,
-          }}
-        >
-          &times;{count}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function CardListRow({
-  name,
-  cardId,
-  count,
-  priceUsd,
-  printing,
-  onHover,
-  onOpen,
-}: {
-  name: string;
-  cardId: string | null | undefined;
-  count: number;
-  priceUsd: string | null | undefined;
-  printing: SelectedPrinting | undefined;
-  onHover: () => void;
-  onOpen: () => void;
-}) {
-  return (
-    <div
-      className="card-row"
-      onMouseEnter={onHover}
-      onClick={onOpen}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        padding: "5px 4px",
-        borderBottom: "1px solid var(--border)",
-      }}
-    >
-      <CardImage
-        cardId={cardId}
-        printing={printing}
-        version="small"
-        alt=""
-        style={{ width: 28, height: 39, objectFit: "cover", borderRadius: 3, flexShrink: 0, background: "var(--surface)" }}
-      />
-      <div
-        style={{
-          flex: 1,
-          minWidth: 0,
-          fontSize: 14,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {name}
-        {count > 1 && (
-          <span style={{ color: "var(--text-muted)", fontWeight: 600, marginLeft: 6 }}>&times;{count}</span>
-        )}
-      </div>
-      {priceUsd && (
-        <div style={{ fontSize: 12, color: "var(--text-muted)", flexShrink: 0 }}>
-          ${(parseFloat(priceUsd) * count).toFixed(2)}
-        </div>
-      )}
-    </div>
-  );
-}
+import "./deckview.css";
 
 // Auto-retry schedule for Scryfall lookup failures (see the fetch effect
 // in DeckView) — slow and capped on purpose, not a tight poll loop.
 const RETRY_DELAYS_MS = [30_000, 90_000, 180_000];
 
-const TAB_LABELS = { build: "DECKBUILDER", insights: "INSIGHTS", chat: "CORRESPONDENCE" } as const;
+const TAB_LABELS = { build: "Deck", insights: "Insights", chat: "Correspondence" } as const;
+
+// How the list is shown is a per-viewer preference, kept in the browser.
+const SETTINGS_KEY = "mtg-deck-doctor:deckView";
+const DEFAULT_SETTINGS: ListSettings = { view: "text", groupBy: "type", sortBy: "name", showMana: true, showPrices: false };
+
+function loadSettings(): ListSettings {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null");
+    if (saved && typeof saved === "object") {
+      return {
+        view: saved.view in VIEW_LABELS ? saved.view : DEFAULT_SETTINGS.view,
+        groupBy: saved.groupBy in GROUP_LABELS ? saved.groupBy : DEFAULT_SETTINGS.groupBy,
+        sortBy: saved.sortBy in SORT_LABELS ? saved.sortBy : DEFAULT_SETTINGS.sortBy,
+        showMana: typeof saved.showMana === "boolean" ? saved.showMana : DEFAULT_SETTINGS.showMana,
+        showPrices: typeof saved.showPrices === "boolean" ? saved.showPrices : DEFAULT_SETTINGS.showPrices,
+      };
+    }
+  } catch {
+    // no saved settings, or the browser won't say — the defaults do
+  }
+  return DEFAULT_SETTINGS;
+}
 
 // An EDHREC include at or above this rate counts as a "staple" for the
 // Insights tab's attention badge — played in at least half the decks that
@@ -199,13 +118,7 @@ export default function DeckView() {
   const [replacementsReady, setReplacementsReady] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [nameInput, setNameInput] = useState("");
-  const [viewMode, setViewMode] = useState<"images" | "list">(() => {
-    try {
-      return localStorage.getItem("mtg-deck-doctor:viewMode") === "list" ? "list" : "images";
-    } catch {
-      return "images";
-    }
-  });
+  const [settings, setSettings] = useState<ListSettings>(loadSettings);
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   // Scryfall ids learned from hovering cards that aren't in the deck (EDHREC
   // rows, AI suggestions), which carry their own ids — so the preview can
@@ -229,6 +142,13 @@ export default function DeckView() {
   const [importBusy, setImportBusy] = useState(false);
   const [exportText, setExportText] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // The deck page is wider than the rest of the app.
+  useEffect(() => {
+    const root = document.getElementById("root");
+    root?.classList.add("dv-wide");
+    return () => root?.classList.remove("dv-wide");
+  }, []);
 
   useEffect(() => {
     if (!deckId) return;
@@ -284,6 +204,18 @@ export default function DeckView() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deck?.cards, deck?.commander, retryAttempt]);
+
+  // Cards cached before mana costs and mana values were recorded show no cost. They are asked
+  // for again, fresh, once per card per visit.
+  const backfilled = useRef(new Set<string>());
+  useEffect(() => {
+    const stale = Object.entries(cardInfo)
+      .filter(([name, info]) => info.manaCost === undefined && !backfilled.current.has(name))
+      .map(([name]) => name);
+    if (stale.length === 0) return;
+    stale.forEach((name) => backfilled.current.add(name));
+    getCardInfoBatch(stale, true).then((result) => setCardInfo((prev) => ({ ...prev, ...result.info })));
+  }, [cardInfo]);
 
   // EDHREC data is per commander, not per deck state — fetched when the
   // commander is set/changes, and diffed against the live deck at render
@@ -407,6 +339,15 @@ export default function DeckView() {
     if (!deck) return;
     await deleteDeck(deck.id);
     navigate("/");
+  }
+
+  function handleSettings(next: ListSettings) {
+    setSettings(next);
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+    } catch {
+      // per-viewer convenience only — fine if it's unavailable
+    }
   }
 
   function handleHover(name: string, id?: string | null) {
@@ -568,17 +509,12 @@ export default function DeckView() {
   const cardCounts = new Map<string, number>();
   deck?.cards.forEach((name) => cardCounts.set(name, (cardCounts.get(name) ?? 0) + 1));
 
-  // Built once and shared by both the categorized ledger render below and
-  // the card modal's prev/next navigation, so stepping through cards
-  // follows the exact same order they're shown on screen.
-  const byCategory = new Map<string, { name: string; count: number }[]>();
-  cardCounts.forEach((count, name) => {
-    const category = categoryFor(cardInfo[name]?.typeLine ?? undefined);
-    if (!byCategory.has(category)) byCategory.set(category, []);
-    byCategory.get(category)!.push({ name, count });
-  });
-  byCategory.forEach((entries) => entries.sort((a, b) => a.name.localeCompare(b.name)));
-  const orderedNames = CATEGORY_ORDER.flatMap((category) => (byCategory.get(category) ?? []).map((e) => e.name));
+  // The list as rows, grouped and sorted as the viewer chose. The card modal's previous and
+  // next follow the same order, so stepping through cards goes the way they are shown.
+  const rows = buildRows(deck?.cards ?? [], deck?.commander ?? null, cardInfo, priceFor);
+  const groups = groupRows(rows, settings.groupBy, settings.sortBy);
+  const orderedNames = groups.flatMap((g) => g.rows.filter((r) => !r.isCommander).map((r) => r.name));
+  const stats = deckStats(rows, (name) => cardInfo[name]?.manaCost);
   const modalIndex = modalCard ? orderedNames.indexOf(modalCard) : -1;
 
   const deckNames = new Set(deck?.commander ? [...(deck?.cards ?? []), deck.commander] : (deck?.cards ?? []));
@@ -601,276 +537,142 @@ export default function DeckView() {
     visibleMessages.push({ role: "user", text: pendingMessage });
   }
 
+  const title = renaming ? (
+    <input
+      autoFocus
+      className="dv-title-input"
+      value={nameInput}
+      onChange={(e) => setNameInput(e.target.value)}
+      onFocus={(e) => e.currentTarget.select()}
+      onBlur={handleRenameSave}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.currentTarget.blur();
+        else if (e.key === "Escape") setRenaming(false);
+      }}
+      placeholder="Name this deck..."
+    />
+  ) : (
+    <h1 className={`dv-title${deck ? " dv-title-edit" : ""}`} onClick={() => deck && startRenaming()}>
+      {deck ? displayTitle : "Loading…"}
+      {deck && (
+        <span className="dv-rename" aria-hidden="true">
+          click to rename
+        </span>
+      )}
+    </h1>
+  );
+
+  const previewName = hoveredCard ?? deck?.commander ?? null;
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-      <header
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          gap: 16,
-          borderBottom: "1px solid var(--border)",
-          paddingBottom: 16,
-        }}
-      >
-        {deck?.commander && (
-          <CardImage
-            cardId={cardInfo[deck.commander]?.id}
-            printing={selectedPrintings[deck.commander]}
-            version="normal"
-            alt={deck.commander}
-            title={deck.commander}
-            onMouseEnter={() => setHoveredCard(deck.commander)}
-            style={{ width: 110, flexShrink: 0, display: "block", borderRadius: 8, border: "1px solid var(--border)" }}
-          />
-        )}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <Link to="/" style={{ ...eyebrowStyle, textDecoration: "none", display: "inline-block" }}>
-            &larr; ALL DECKS
-          </Link>
+    <div className="dv">
+      <DeckHero
+        commander={deck?.commander ?? null}
+        commanderId={deck?.commander ? cardInfo[deck.commander]?.id : null}
+        printing={deck?.commander ? selectedPrintings[deck.commander] : undefined}
+        showCommander={!!deck?.name}
+        title={title}
+        colorIdentity={deck?.commander_color_identity ?? []}
+        cardCount={totalCardCount}
+        price={totalPrice}
+        costToComplete={costToComplete}
+        updatedAt={deck?.updated_at}
+        warning={
+          unresolvedCount > 0 && (
+            <span className="dv-warn">
+              {unresolvedCount} card{unresolvedCount === 1 ? "" : "s"} couldn't load from Scryfall (likely rate-limited).{" "}
+              {nextRetryAt !== null ? `Retrying in ${Math.max(0, Math.ceil((nextRetryAt - nowTick) / 1000))}s…` : "Reload in a few minutes."}
+            </span>
+          )
+        }
+      />
 
-          {renaming ? (
-            <input
-              autoFocus
-              value={nameInput}
-              onChange={(e) => setNameInput(e.target.value)}
-              onFocus={(e) => e.currentTarget.select()}
-              onBlur={handleRenameSave}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") e.currentTarget.blur();
-                else if (e.key === "Escape") setRenaming(false);
-              }}
-              placeholder="Name this deck..."
-              style={{
-                display: "block",
-                fontSize: 26,
-                fontWeight: 600,
-                fontFamily: "inherit",
-                color: "var(--text)",
-                background: "none",
-                border: "none",
-                borderBottom: "2px solid var(--accent)",
-                padding: 0,
-                marginTop: 4,
-                width: "100%",
-              }}
-            />
-          ) : (
-            <div
-              onClick={() => deck && startRenaming()}
-              className={deck ? "deck-title" : undefined}
-              style={{
-                fontSize: 26,
-                fontWeight: 600,
-                marginTop: 4,
-                cursor: deck ? "pointer" : "default",
-              }}
-            >
-              {displayTitle}
-              {deck && (
-                <span className="rename-hint" aria-hidden="true">
-                  click to rename
-                </span>
-              )}
-            </div>
-          )}
-
-          {deck?.name && deck.commander && (
-            <div style={{ fontSize: 13, fontStyle: "italic", color: "var(--text-muted)", marginTop: 2 }}>
-              Commander: {deck.commander}
-            </div>
-          )}
-          {deck && deck.commander_color_identity.length > 0 && (
-            <div style={{ marginTop: 4 }}>
-              <ManaPips colors={deck.commander_color_identity} />
-            </div>
-          )}
-          {deck && (
-            <div style={{ fontSize: 13, fontStyle: "italic", color: "var(--text-muted)", marginTop: 4 }}>
-              {totalCardCount}/100 cards · ${totalPrice.toFixed(2)}
-              {costToComplete > 0 && costToComplete < totalPrice && ` · $${costToComplete.toFixed(2)} to complete`}
-            </div>
-          )}
-          {unresolvedCount > 0 && (
-            <div style={{ fontSize: 13, color: "var(--danger)", marginTop: 4 }}>
-              {unresolvedCount} card{unresolvedCount === 1 ? "" : "s"} couldn't load from Scryfall (likely
-              rate-limited) — type, price, and category are missing for {unresolvedCount === 1 ? "it" : "them"}.{" "}
-              {nextRetryAt !== null
-                ? `Retrying automatically in ${Math.max(0, Math.ceil((nextRetryAt - nowTick) / 1000))}s…`
-                : "Reload this page in a few minutes to try again."}
-            </div>
-          )}
-        </div>
+      <div className="dv-container">
+        {error && <div style={{ color: "var(--accent)", fontSize: 14, paddingTop: 12 }}>{error}</div>}
 
         {deck && (
-          <DeckMenu
-            onAddToCollection={handleAddDeckToCollection}
-            onRefreshCardData={handleRefreshCardData}
-            onImport={() => setShowImport(true)}
-            onExport={handleExport}
-            onDuplicate={handleDuplicateDeck}
-            onDelete={handleDeleteDeck}
-          />
-        )}
-      </header>
-
-      {error && <div style={{ color: "var(--accent)", fontSize: 14 }}>{error}</div>}
-
-      {deck && (
-        <nav style={{ display: "flex", gap: 20, borderBottom: "1px solid var(--border)" }}>
-          {(["build", "insights", "chat"] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              style={{
-                background: "none",
-                border: "none",
-                borderBottom: tab === t ? "2px solid var(--accent)" : "2px solid transparent",
-                color: tab === t ? "var(--accent)" : "var(--text-muted)",
-                fontFamily: "inherit",
-                fontSize: 13,
-                fontWeight: 600,
-                letterSpacing: "0.08em",
-                padding: "0 0 10px",
-                cursor: "pointer",
-              }}
-            >
-              {TAB_LABELS[t]}
-              {t === "insights" && stapleCount > 0 && (
-                <span style={{ marginLeft: 6, color: "var(--accent-gold)" }}>· {stapleCount}</span>
-              )}
+          <div className="dv-actions" role="tablist">
+            {(["build", "insights", "chat"] as const).map((t) => (
+              <button key={t} role="tab" aria-selected={tab === t} className="dv-action" onClick={() => setTab(t)}>
+                {TAB_LABELS[t]}
+                {t === "insights" && stapleCount > 0 && <span className="dv-count">{stapleCount}</span>}
+              </button>
+            ))}
+            <span className="dv-sep" aria-hidden />
+            <button className="dv-action" onClick={() => setShowImport(true)}>
+              Import
             </button>
-          ))}
-        </nav>
-      )}
-
-      {deck && tab === "build" && !deck.commander && (
-        <section>
-          <div style={eyebrowStyle}>CHOOSE A COMMANDER</div>
-          <CardSearchBox
-            placeholder="Search for your commander..."
-            submitLabel="Set"
-            onSubmit={async (name) => setDeck(await setCommander(deck.id, name))}
-          />
-        </section>
-      )}
-
-      {deck && tab === "build" && deck.commander && (
-        <section style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div
-              style={{
-                position: "sticky",
-                top: 0,
-                zIndex: 5,
-                background: "var(--bg)",
-                paddingTop: 4,
-                paddingBottom: 10,
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                <div style={eyebrowStyle}>ADD A CARD</div>
-                <Link to={`/search?deck=${deck.id}`} style={{ fontSize: 12, color: "var(--accent)" }}>
-                  Browse all cards →
-                </Link>
-              </div>
-              <CardSearchBox
-                placeholder="Search for a card to add..."
-                submitLabel="Add"
-                onSubmit={async (name) => setDeck(await addCard(deck.id, name))}
-              />
-            </div>
-
-            {deck.cards.length > 0 && (
-              <div style={{ marginTop: 10 }}>
-                <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-                  {(["images", "list"] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      onClick={() => {
-                        setViewMode(mode);
-                        try {
-                          localStorage.setItem("mtg-deck-doctor:viewMode", mode);
-                        } catch {
-                          // per-viewer convenience only — fine if it's unavailable
-                        }
-                      }}
-                      className="btn"
-                      style={
-                        viewMode === mode
-                          ? { ...buttonStyle, borderColor: "var(--accent)", color: "var(--accent)" }
-                          : buttonStyle
-                      }
-                    >
-                      {mode === "images" ? "Images" : "List"}
-                    </button>
-                  ))}
-                </div>
-
-                {(() => {
-                  return CATEGORY_ORDER.filter((category) => byCategory.get(category)?.length).map((category) => {
-                    const entries = byCategory.get(category)!;
-                    const total = entries.reduce((sum, e) => sum + e.count, 0);
-                    return (
-                      <div key={category} style={{ marginBottom: 18 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8 }}>
-                          {category.toUpperCase()} ({total})
-                        </div>
-                        {viewMode === "images" ? (
-                          <div
-                            style={{
-                              display: "grid",
-                              gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))",
-                              gap: 12,
-                            }}
-                          >
-                            {entries.map(({ name, count }) => (
-                              <CardTile
-                                key={name}
-                                name={name}
-                                cardId={cardInfo[name]?.id}
-                                count={count}
-                                printing={selectedPrintings[name]}
-                                onHover={() => setHoveredCard(name)}
-                                onOpen={() => setModalCard(name)}
-                              />
-                            ))}
-                          </div>
-                        ) : (
-                          <div>
-                            {entries.map(({ name, count }) => (
-                              <CardListRow
-                                key={name}
-                                name={name}
-                                cardId={cardInfo[name]?.id}
-                                count={count}
-                                priceUsd={priceFor(name)}
-                                printing={selectedPrintings[name]}
-                                onHover={() => setHoveredCard(name)}
-                                onOpen={() => setModalCard(name)}
-                              />
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
-            )}
-
+            <button className="dv-action" onClick={handleExport}>
+              Export
+            </button>
+            <DeckMenu
+              onAddToCollection={handleAddDeckToCollection}
+              onRefreshCardData={handleRefreshCardData}
+              onImport={() => setShowImport(true)}
+              onExport={handleExport}
+              onDuplicate={handleDuplicateDeck}
+              onDelete={handleDeleteDeck}
+            />
+            <div className="dv-grow" />
+            <Link to={`/search?deck=${deck.id}`} className="dv-action">
+              Browse all cards →
+            </Link>
           </div>
+        )}
 
-          <CardPreview
-            name={hoveredCard}
-            cardId={hoveredCard ? (hoverIds[hoveredCard] ?? cardInfo[hoveredCard]?.id) : undefined}
-            printing={hoveredCard ? selectedPrintings[hoveredCard] : undefined}
-            priceUsd={hoveredCard ? priceFor(hoveredCard) : undefined}
-          />
-        </section>
-      )}
+        {deck && tab === "build" && !deck.commander && (
+          <section className="dv-narrow">
+            <div style={eyebrowStyle}>CHOOSE A COMMANDER</div>
+            <CardSearchBox
+              placeholder="Search for your commander..."
+              submitLabel="Set"
+              onSubmit={async (name) => setDeck(await setCommander(deck.id, name))}
+            />
+          </section>
+        )}
+
+        {deck && tab === "build" && deck.commander && (
+          <div className="dv-main">
+            <DeckSidebar
+              name={previewName}
+              cardId={previewName ? (hoverIds[previewName] ?? cardInfo[previewName]?.id) : undefined}
+              printing={previewName ? selectedPrintings[previewName] : undefined}
+              priceUsd={previewName ? priceFor(previewName) : undefined}
+              inDeck={!!previewName && cardCounts.has(previewName)}
+              owned={!!previewName && ownedCards.has(previewName)}
+              onToggleOwned={() => previewName && handleToggleOwned(previewName)}
+              onOpen={() => previewName && setModalCard(previewName)}
+            />
+            <div className="dv-content">
+              <DeckControls
+                settings={settings}
+                onChange={handleSettings}
+                add={
+                  <CardSearchBox
+                    placeholder="Add a card..."
+                    submitLabel="Add"
+                    onSubmit={async (name) => setDeck(await addCard(deck.id, name))}
+                  />
+                }
+              />
+              <DeckList
+                groups={groups}
+                view={settings.view}
+                options={settings}
+                printings={selectedPrintings}
+                owned={ownedCards}
+                onHover={(name) => setHoveredCard(name)}
+                onOpen={(name) => setModalCard(name)}
+                onAddOne={async (name) => setDeck(await addCard(deck.id, name))}
+                onRemoveOne={handleRemoveOne}
+              />
+              <DeckStats stats={stats} />
+            </div>
+          </div>
+        )}
 
       {deck && tab === "insights" && deck.commander && (
-        <>
+        <div className="dv-narrow">
           {/* The point of the page, full width and first: the swaps the Doctor
               recommends, each with its reasons. */}
           <CutSuggestions
@@ -912,11 +714,11 @@ export default function DeckView() {
             priceUsd={hoveredCard ? priceFor(hoveredCard) : undefined}
             />
           </section>
-        </>
+        </div>
       )}
 
       {deck && tab === "insights" && !deck.commander && (
-        <div style={{ color: "var(--text-muted)", fontSize: 14 }}>
+        <div className="dv-narrow" style={{ color: "var(--text-muted)", fontSize: 14 }}>
           Pick a commander in the Deckbuilder tab first — insights are built around it.
         </div>
       )}
@@ -959,7 +761,7 @@ export default function DeckView() {
       {exportText !== null && <ExportDecklistModal text={exportText} onClose={() => setExportText(null)} />}
 
       {deck && tab === "chat" && (
-        <>
+        <div className="dv-narrow">
           <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {visibleMessages.map((m, i) => (
               <div
@@ -1011,8 +813,11 @@ export default function DeckView() {
               Send
             </button>
           </form>
-        </>
+        </div>
       )}
+      </div>
+
+      {deck && tab === "build" && deck.commander && <DeckFooter rows={rows} cardCount={totalCardCount} price={totalPrice} costToComplete={costToComplete} />}
     </div>
   );
 }
