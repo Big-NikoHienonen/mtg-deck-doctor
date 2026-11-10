@@ -806,14 +806,27 @@ export function scryfallImageUrlById(id: string, version: ImageVersion = "small"
   return `https://cards.scryfall.io/${version}/front/${id[0]}/${id[1]}/${id}.jpg`;
 }
 
-export type Printing = { id: string; setName: string; releasedAt: string | null; priceUsd: string | null };
+export type Printing = {
+  id: string;
+  setName: string;
+  // The set's code ("2x2") and the card's number in it ("472").
+  set: string | null;
+  collectorNumber: string | null;
+  releasedAt: string | null;
+  priceUsd: string | null;
+  // The foil copy's price (the etched one's, if that is the only foil), and the
+  // finishes the printing comes in: "nonfoil", "foil", "etched".
+  priceUsdFoil: string | null;
+  finishes: string[];
+  // "Borderless", "Showcase", "Foil only" and the like; empty for a plain printing.
+  treatments: string[];
+};
 
 // Every printing of a card by exact name, newest first, via the backend's
 // cache (card_details.py) rather than a Scryfall search from the browser on
-// every picker open. Only the first results page (175) — plenty for
-// virtually any card; only heavily-reprinted basics have more. null means
-// the lookup failed with nothing cached — distinct from [], a real "no
-// printings found".
+// every picker open. All of them, however many: a basic land has hundreds.
+// null means the lookup failed with nothing cached — distinct from [], a
+// real "no printings found".
 export async function getPrintings(name: string): Promise<Printing[] | null> {
   const res = await safeFetch(`${API_BASE}/cards/printings?name=${encodeURIComponent(name)}`);
   if (!res || !res.ok) return null;

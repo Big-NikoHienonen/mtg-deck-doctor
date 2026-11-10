@@ -654,6 +654,12 @@
   font-size: 12px;
 }
 
+.dv-foil {
+  flex: none;
+  color: var(--accent);
+  font-size: 12px;
+}
+
 /* ---- the visual views ---- */
 
 .dv-visual-group {

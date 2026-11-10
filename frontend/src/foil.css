@@ -1,0 +1,48 @@
+/* The shimmer over a card used as a foil: a wide, bright band of light drifting across a faint
+   rainbow tint, so the card still reads as foil while the band is off to one side. */
+
+.foil-sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+  background:
+    linear-gradient(
+      115deg,
+      transparent 15%,
+      rgba(255, 255, 255, 0.85) 33%,
+      rgba(255, 110, 205, 0.8) 40%,
+      rgba(100, 215, 255, 0.8) 50%,
+      rgba(255, 245, 130, 0.8) 60%,
+      rgba(255, 255, 255, 0.7) 67%,
+      transparent 82%
+    ),
+    linear-gradient(
+      135deg,
+      rgba(255, 120, 210, 0.2),
+      rgba(110, 200, 255, 0.2) 50%,
+      rgba(255, 240, 140, 0.2)
+    );
+  background-size: 300% 100%, 100% 100%;
+  background-position: 100% 0, 0 0;
+  animation: foil-drift 6s ease-in-out infinite;
+}
+
+@keyframes foil-drift {
+  0% {
+    background-position: 100% 0, 0 0;
+  }
+  50% {
+    background-position: 0% 0, 0 0;
+  }
+  100% {
+    background-position: 100% 0, 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .foil-sheen {
+    animation: none;
+    background-position: 45% 0, 0 0;
+  }
+}

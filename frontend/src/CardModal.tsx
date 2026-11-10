@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { getRulings, type CardInfo, type Ruling } from "./api";
+import { getPrintings, getRulings, type CardInfo, type Ruling } from "./api";
 import PrintingPicker from "./PrintingPicker";
 import CardImage from "./CardImage";
-import type { SelectedPrinting } from "./printings";
+import FoilSheen from "./FoilSheen";
+import { foilSupport, priceUsdOf, selectPrinting, type SelectedPrinting } from "./printings";
 import { buttonStyle, eyebrowStyle, inputStyle } from "./styles";
 
 const LEGALITY_LABEL: Record<string, string> = {
@@ -78,6 +79,38 @@ export default function CardModal({
   const [addingMany, setAddingMany] = useState(false);
   const [addMessage, setAddMessage] = useState<string | null>(null);
   const [togglingOwned, setTogglingOwned] = useState(false);
+  const [togglingFoil, setTogglingFoil] = useState(false);
+  // Tied to the card it's about, so it doesn't follow you to the next one.
+  const [foilNote, setFoilNote] = useState<{ name: string; text: string } | null>(null);
+
+  // Uses the card as a foil, or stops. What the card comes in isn't known for a
+  // printing nobody has picked (the card's default one) or one saved before foil
+  // existed, so the first time it's looked up in the printings list.
+  async function handleToggleFoil() {
+    if (!onChangePrinting) return;
+    setFoilNote(null);
+    let current = printing;
+    if (foilSupport(current) === "unknown") {
+      setTogglingFoil(true);
+      try {
+        const id = current?.id ?? cardId ?? info?.id;
+        const found = (await getPrintings(name))?.find((p) => p.id === id);
+        if (!found) {
+          setFoilNote({ name, text: "Couldn't look up this printing's foil. Try again in a moment." });
+          return;
+        }
+        current = selectPrinting(found);
+      } finally {
+        setTogglingFoil(false);
+      }
+    }
+    if (foilSupport(current) === "none") {
+      onChangePrinting(current!); // Keep what was just found out, so the button knows next time.
+      setFoilNote({ name, text: "This printing doesn't come in foil. Change printing to find one that does." });
+      return;
+    }
+    onChangePrinting({ ...current!, foil: !current!.foil });
+  }
 
   async function handleToggleOwned() {
     if (!onToggleOwned) return;
@@ -174,7 +207,9 @@ export default function CardModal({
     };
   }, [info?.id]);
 
-  const priceUsd = printing?.priceUsd ?? info?.priceUsd;
+  const priceUsd = priceUsdOf(printing, info?.priceUsd);
+  const foil = !!printing?.foil;
+  const support = foilSupport(printing);
 
   return (
     <>
@@ -206,21 +241,22 @@ export default function CardModal({
             padding: 24,
           }}
         >
-          <CardImage
-            cardId={cardId ?? info?.id}
-            printing={printing}
-            version="normal"
-            alt={name}
-            style={{
-              width: 320,
-              aspectRatio: "488 / 680",
-              flexShrink: 0,
-              alignSelf: "flex-start",
-              display: "block",
-              borderRadius: 8,
-              border: "1px solid var(--border)",
-            }}
-          />
+          <div style={{ position: "relative", width: 320, flexShrink: 0, alignSelf: "flex-start" }}>
+            <CardImage
+              cardId={cardId ?? info?.id}
+              printing={printing}
+              version="normal"
+              alt={name}
+              style={{
+                width: "100%",
+                aspectRatio: "488 / 680",
+                display: "block",
+                borderRadius: 8,
+                border: "1px solid var(--border)",
+              }}
+            />
+            {foil && <FoilSheen radius={8} />}
+          </div>
           <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
               <div style={{ fontSize: 20, fontWeight: 600 }}>{name}</div>
@@ -239,11 +275,15 @@ export default function CardModal({
               <div style={{ fontSize: 14, fontStyle: "italic", color: "var(--text-muted)" }}>{info.typeLine}</div>
             )}
 
-            <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Printing: {printing?.setName ?? "default"}</div>
+            <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
+              Printing: {printing?.setName ?? "default"}
+              {foil && " · foil"}
+            </div>
 
             {priceUsd && (
               <div style={{ fontSize: 14 }}>
                 ${priceUsd} each
+                {foil && " (foil)"}
                 {!!count && count > 1 && ` · $${(parseFloat(priceUsd) * count).toFixed(2)} total`}
               </div>
             )}
@@ -339,6 +379,25 @@ export default function CardModal({
                     Change printing
                   </button>
                 )}
+                {onChangePrinting && (
+                  <button
+                    onClick={handleToggleFoil}
+                    disabled={togglingFoil || support === "none" || support === "only"}
+                    aria-pressed={foil}
+                    title={
+                      support === "none"
+                        ? "This printing doesn't come in foil"
+                        : support === "only"
+                          ? "This printing only comes in foil"
+                          : undefined
+                    }
+                    className="btn"
+                    style={foil ? { ...buttonStyle, borderColor: "var(--accent)", color: "var(--accent)" } : buttonStyle}
+                  >
+                    {togglingFoil ? "Looking up…" : foil ? "✓ Use foil" : "Use foil"}
+                  </button>
+                )}
+                {foilNote?.name === name && <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{foilNote.text}</div>}
               </div>
             )}
 
@@ -427,6 +486,7 @@ export default function CardModal({
       {showPrintingPicker && onChangePrinting && (
         <PrintingPicker
           name={name}
+          foil={foil}
           onSelect={(selected) => {
             onChangePrinting(selected);
             setShowPrintingPicker(false);

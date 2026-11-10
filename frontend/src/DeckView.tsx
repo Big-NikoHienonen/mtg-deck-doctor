@@ -45,6 +45,7 @@ import ImportCardsModal from "./ImportCardsModal";
 import {
   clearSelectedPrinting,
   loadSelectedPrintings,
+  priceUsdOf,
   saveSelectedPrinting,
   type SelectedPrinting,
 } from "./printings";
@@ -485,7 +486,7 @@ export default function DeckView() {
   // generic default-printing lookup — a $2 old-border Forest shouldn't
   // price like whatever printing Scryfall's plain name search resolves to.
   function priceFor(name: string): string | null {
-    return selectedPrintings[name]?.priceUsd ?? cardInfo[name]?.priceUsd ?? null;
+    return priceUsdOf(selectedPrintings[name], cardInfo[name]?.priceUsd);
   }
 
   const totalCardCount = deck ? deck.cards.length + (deck.commander ? 1 : 0) : 0;

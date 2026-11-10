@@ -1,4 +1,5 @@
 import CardImage from "./CardImage";
+import FoilSheen from "./FoilSheen";
 import type { SelectedPrinting } from "./printings";
 import { eyebrowStyle } from "./styles";
 
@@ -25,24 +26,32 @@ export default function CardPreview({
       <div style={eyebrowStyle}>PREVIEW</div>
       {name ? (
         <>
-          <CardImage
-            key={name}
-            cardId={cardId}
-            printing={printing}
-            version="normal"
-            alt={name}
-            style={{
-              width: "100%",
-              display: "block",
-              borderRadius: 10,
-              border: "1px solid var(--border)",
-              boxShadow: "0 10px 26px rgba(0, 0, 0, 0.3)",
-            }}
-          />
+          <div style={{ position: "relative" }}>
+            <CardImage
+              key={name}
+              cardId={cardId}
+              printing={printing}
+              version="normal"
+              alt={name}
+              style={{
+                width: "100%",
+                display: "block",
+                borderRadius: 10,
+                border: "1px solid var(--border)",
+                boxShadow: "0 10px 26px rgba(0, 0, 0, 0.3)",
+              }}
+            />
+            {printing?.foil && <FoilSheen radius={10} />}
+          </div>
           {priceUsd && (
             <div style={{ marginTop: 10, textAlign: "center", fontSize: 18, fontWeight: 600 }}>
               ${parseFloat(priceUsd).toFixed(2)}
-              {printing && <div style={{ fontSize: 12, fontWeight: 400, color: "var(--text-muted)" }}>{printing.setName}</div>}
+              {printing && (
+                <div style={{ fontSize: 12, fontWeight: 400, color: "var(--text-muted)" }}>
+                  {printing.setName}
+                  {printing.foil && " · foil"}
+                </div>
+              )}
             </div>
           )}
         </>

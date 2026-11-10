@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import CardImage from "./CardImage";
 import type { DeckGroup, DeckRow, ViewMode } from "./deckListModel";
+import FoilSheen from "./FoilSheen";
 import ManaCost from "./ManaCost";
 import type { SelectedPrinting } from "./printings";
 
@@ -34,7 +35,7 @@ function GroupHead({ group, collapsed, onToggle }: { group: DeckGroup; collapsed
 }
 
 // The text views: a column-flowed list of groups, a line to a card.
-function TextList({ groups, view, options, owned, onHover, onOpen, onAddOne, onRemoveOne, collapsed, toggle }: Props & Folding) {
+function TextList({ groups, view, options, owned, printings, onHover, onOpen, onAddOne, onRemoveOne, collapsed, toggle }: Props & Folding) {
   const [menuFor, setMenuFor] = useState<string | null>(null);
   useEffect(() => {
     if (menuFor === null) return;
@@ -55,6 +56,11 @@ function TextList({ groups, view, options, owned, onHover, onOpen, onAddOne, onR
     <li key={r.name} className="dv-row" data-static={r.isCommander} onMouseEnter={() => onHover(r.name)} onClick={() => !r.isCommander && onOpen(r.name)}>
       <span className="dv-qty">{r.count}</span>
       <span className={`dv-name${r.info ? "" : " dv-unknown"}`}>{r.name}</span>
+      {printings[r.name]?.foil && (
+        <span className="dv-foil" title="Used as a foil">
+          ✦
+        </span>
+      )}
       {owned.has(r.name) && (
         <span className="dv-owned" title="In your collection">
           ✓
@@ -102,7 +108,12 @@ function TextList({ groups, view, options, owned, onHover, onOpen, onAddOne, onR
 }
 
 function Art({ row, printings }: { row: DeckRow; printings: Record<string, SelectedPrinting> }) {
-  return <CardImage cardId={row.info?.id} printing={printings[row.name]} version="normal" alt={row.name} title={row.name} loading="lazy" />;
+  return (
+    <>
+      <CardImage cardId={row.info?.id} printing={printings[row.name]} version="normal" alt={row.name} title={row.name} loading="lazy" />
+      {printings[row.name]?.foil && <FoilSheen />}
+    </>
+  );
 }
 
 const noBullets = { margin: 0, padding: 0, listStyle: "none" } as const;

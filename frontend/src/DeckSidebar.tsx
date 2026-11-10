@@ -1,4 +1,5 @@
 import CardImage from "./CardImage";
+import FoilSheen from "./FoilSheen";
 import type { SelectedPrinting } from "./printings";
 
 // Beside the list: the card last pointed at (the commander until something is), its price,
@@ -26,7 +27,10 @@ export default function DeckSidebar({
   return (
     <aside className="dv-side" aria-label="Card preview">
       {name ? (
-        <CardImage key={name} cardId={cardId} printing={printing} version="normal" alt={name} />
+        <div key={name} style={{ position: "relative" }}>
+          <CardImage cardId={cardId} printing={printing} version="normal" alt={name} />
+          {printing?.foil && <FoilSheen />}
+        </div>
       ) : (
         <div className="dv-blank">Point at a card to see it here</div>
       )}
@@ -34,7 +38,12 @@ export default function DeckSidebar({
         <>
           <div className="dv-price-line">
             {price ? <strong>${price}</strong> : <span className="dv-muted">No price</span>}
-            {printing && <span className="dv-muted">{printing.setName}</span>}
+            {printing && (
+              <span className="dv-muted">
+                {printing.setName}
+                {printing.foil && " · foil"}
+              </span>
+            )}
           </div>
           <a
             className="dv-buy"
