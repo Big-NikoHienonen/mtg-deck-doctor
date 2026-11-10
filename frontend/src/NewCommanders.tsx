@@ -18,6 +18,8 @@ function Pick({ pick, onStart }: { pick: CommanderPick; onStart: () => void }) {
     <div
       style={{
         display: "flex",
+        // On a narrow screen the card goes above the text instead of squeezing it.
+        flexWrap: "wrap",
         gap: 18,
         background: "var(--surface)",
         border: "1px solid var(--border)",
@@ -34,7 +36,7 @@ function Pick({ pick, onStart }: { pick: CommanderPick; onStart: () => void }) {
         loading="lazy"
         style={{ width: 220, flexShrink: 0, alignSelf: "flex-start", borderRadius: 13, boxShadow: "0 8px 20px rgba(43, 32, 24, 0.3)" }}
       />
-      <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ flex: "1 1 260px", minWidth: 0, display: "flex", flexDirection: "column", gap: 10 }}>
         <div>
           <div style={{ fontSize: 19, fontWeight: 600, lineHeight: 1.25 }}>{pick.name}</div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-muted)", marginTop: 3, flexWrap: "wrap" }}>
@@ -119,7 +121,7 @@ export default function NewCommanders({ hub, onPicks }: { hub: Hub; onPicks: (pi
       )}
 
       {!busy && picks.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(560px, 1fr))", gap: 20, alignItems: "stretch" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(560px, 100%), 1fr))", gap: 20, alignItems: "stretch" }}>
           {picks.map((pick) => (
             <Pick key={pick.name} pick={pick} onStart={() => start(pick)} />
           ))}

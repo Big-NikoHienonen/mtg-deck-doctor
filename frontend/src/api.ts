@@ -72,9 +72,18 @@ export function extractText(content: string | MessageBlock[]): string {
     .join("");
 }
 
-export async function createDeck(): Promise<Deck> {
-  const res = await safeFetch(`${API_BASE}/decks`, { method: "POST" });
-  if (!res || !res.ok) throw new Error("failed to create deck");
+// A new deck, optionally named and with its commander set. A commander that can't lead is refused with
+// the reason, and no deck is made.
+export async function createDeck(options?: { name?: string; commander?: string }): Promise<Deck> {
+  const res = await safeFetch(
+    `${API_BASE}/decks`,
+    options ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(options) } : { method: "POST" },
+  );
+  if (!res) throw new Error("Couldn't reach the Deck Doctor backend. Is it running on port 8000?");
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(typeof body?.detail === "string" ? body.detail : "Couldn't create the deck.");
+  }
   return res.json();
 }
 

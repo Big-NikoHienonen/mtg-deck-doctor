@@ -5,6 +5,7 @@ import DeckTile from "./DeckTile";
 import DoctorsOrders from "./DoctorsOrders";
 import NewCards from "./NewCards";
 import NewCommanders from "./NewCommanders";
+import NewDeckModal from "./NewDeckModal";
 import { buttonStyle, eyebrowStyle } from "./styles";
 
 // The landing page: what's new that could work in your decks, then the decks
@@ -13,6 +14,7 @@ import { buttonStyle, eyebrowStyle } from "./styles";
 export default function HubView() {
   const [hub, setHub] = useState<Hub | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [newDeckOpen, setNewDeckOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -77,9 +79,9 @@ export default function HubView() {
           <Link to="/search" className="btn" style={{ ...buttonStyle, textDecoration: "none", display: "inline-block" }}>
             Search cards
           </Link>
-          <Link to="/new" className="btn" style={{ ...buttonStyle, textDecoration: "none", display: "inline-block" }}>
+          <button type="button" className="btn" style={buttonStyle} onClick={() => setNewDeckOpen(true)}>
             New deck
-          </Link>
+          </button>
           <Link to="/admin" className="btn" style={{ ...buttonStyle, textDecoration: "none", display: "inline-block" }}>
             Admin
           </Link>
@@ -117,6 +119,8 @@ export default function HubView() {
           </div>
         </details>
       )}
+
+      {newDeckOpen && <NewDeckModal onClose={() => setNewDeckOpen(false)} />}
     </div>
   );
 }

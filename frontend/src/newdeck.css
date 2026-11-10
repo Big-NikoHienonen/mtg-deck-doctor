@@ -1,0 +1,255 @@
+/* The New deck modal. Colors come from the theme's tokens. */
+
+.nd-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 10vh 16px 24px;
+  background: rgba(10, 8, 6, 0.6);
+  overflow-y: auto;
+}
+
+.nd-dialog {
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 22px 24px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 21px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+
+.nd-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nd-head h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.nd-x {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.nd-x:hover:not(:disabled) {
+  background: var(--user-bubble);
+  color: var(--text);
+}
+
+.nd-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+}
+
+.nd-field > span,
+.nd-field > label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.nd-field input {
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+}
+
+.nd-field input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+
+.nd-field input:focus {
+  outline: 2px solid var(--accent-gold);
+  outline-offset: 1px;
+  border-color: var(--accent-gold);
+}
+
+.nd-field small {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.nd-results {
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 340px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.nd-results li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.nd-results li[aria-selected="true"] {
+  background: var(--user-bubble);
+}
+
+.nd-results .nd-empty {
+  cursor: default;
+  color: var(--text-muted);
+}
+
+.nd-thumb {
+  width: 34px;
+  flex: none;
+  border-radius: 3px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+.nd-result-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.nd-result-text strong,
+.nd-result-text span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nd-result-text span {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.nd-chosen {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.nd-art {
+  width: 104px;
+  flex: none;
+  border-radius: 4.5% / 3.2%;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.nd-chosen-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.nd-chosen-text strong {
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.nd-chosen-text > span {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.nd-link {
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.nd-error {
+  padding: 8px 12px;
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.nd-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.nd-cancel,
+.nd-create {
+  height: 38px;
+  padding: 0 18px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.nd-cancel {
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+}
+
+.nd-cancel:hover:not(:disabled) {
+  background: var(--user-bubble);
+}
+
+.nd-create {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.nd-create:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+
+.nd-create:disabled,
+.nd-cancel:disabled,
+.nd-x:disabled {
+  opacity: 0.55;
+  cursor: default;
+}

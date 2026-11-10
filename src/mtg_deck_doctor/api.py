@@ -234,9 +234,25 @@ def _generate(generate) -> list[dict]:
         raise HTTPException(status_code=502, detail="The Doctor didn't finish thinking that through. Try again.")
 
 
+class NewDeckRequest(BaseModel):
+    name: str = Field(default="", max_length=100)
+    commander: str = Field(default="", max_length=200)
+
+
 @app.post("/decks")
-def create_deck_endpoint() -> Deck:
-    return create_deck()
+def create_deck_endpoint(request: NewDeckRequest | None = None) -> Deck:
+    """A new deck, optionally named and with its commander already set. A commander that can't lead
+    is a 400 and leaves no deck behind."""
+    deck = create_deck()
+    try:
+        if request and request.commander.strip():
+            _raise_if_error(set_commander(deck, request.commander.strip()))
+        if request and request.name.strip():
+            rename_deck(deck, request.name)
+    except BaseException:
+        delete_deck(deck.id)
+        raise
+    return deck
 
 
 @app.get("/decks")
