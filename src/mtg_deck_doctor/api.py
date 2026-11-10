@@ -59,6 +59,7 @@ from mtg_deck_doctor.tool_loop import (
     add_card,
     add_cards,
     remove_card,
+    ConversationCutOff,
     run_conversation,
     set_commander,
     discover_new_cards,
@@ -251,7 +252,10 @@ def rename_deck_endpoint(deck_id: str, request: DeckNameRequest) -> Deck:
 @app.post("/decks/{deck_id}/chat")
 def chat_endpoint(deck_id: str, request: ChatRequest) -> ChatResponse:
     deck = _get_deck_or_404(deck_id)
-    reply, messages = run_conversation(deck, deck.messages, request.message)
+    try:
+        reply, messages = run_conversation(deck, deck.messages, request.message)
+    except ConversationCutOff:
+        raise HTTPException(status_code=502, detail="The Doctor ran out of room before finishing that. Try again, or ask for less at once.")
     save_messages(deck, messages)
     return ChatResponse(reply=reply, deck=deck)
 

@@ -1909,6 +1909,23 @@ def _serialize_block(block) -> dict:
     return {"type": block.type}
 
 
+# Room for one chat turn. Thinking comes out of the same budget, and a turn that looks up several
+# cards in parallel can spend most of 2,048 tokens before its last tool call is finished.
+CHAT_MAX_TOKENS = 8000
+
+
+class ConversationCutOff(Exception):
+    """The model ran out of tokens in the middle of a tool call, so there is nothing to act on."""
+
+
+def _without_dangling_tool_use(messages: list[dict]) -> list[dict]:
+    """`messages` without a last assistant turn whose tool calls never got results. A turn cut off
+    at the token limit used to be saved that way, and the API rejects every message after it."""
+    last = messages[-1] if messages else None
+    content = last["content"] if last and last["role"] == "assistant" and isinstance(last["content"], list) else []
+    return messages[:-1] if any(b.get("type") == "tool_use" for b in content) else messages
+
+
 def run_conversation(deck: Deck, messages: list[dict], user_message: str) -> tuple[str, list[dict]]:
     """Runs the tool-calling loop for one user turn against `deck`, starting
     from `messages` (prior conversation history, [] for a new deck). Returns
@@ -1917,7 +1934,7 @@ def run_conversation(deck: Deck, messages: list[dict], user_message: str) -> tup
     deck.messages).
     """
     tool_implementations = make_tool_implementations(deck)
-    messages = [*messages, {"role": "user", "content": user_message}]
+    messages = [*_without_dangling_tool_use(messages), {"role": "user", "content": user_message}]
 
     while True:
         # Rebuilt every iteration, not just once, so a mutation from an
@@ -1959,11 +1976,16 @@ def run_conversation(deck: Deck, messages: list[dict], user_message: str) -> tup
         )
         response = client.messages.create(
             model=MODEL,
-            max_tokens=2048,
+            max_tokens=CHAT_MAX_TOKENS,
             system=system_prompt,
             tools=TOOLS,
             messages=messages,
         )
+
+        # A tool call cut off at the limit is half-written, so it can't be answered, and saving it
+        # would leave a history the API refuses. Nothing is saved: the caller never sees this turn.
+        if response.stop_reason == "max_tokens" and any(b.type == "tool_use" for b in response.content):
+            raise ConversationCutOff("ran out of tokens in the middle of a tool call")
 
         assistant_content = [_serialize_block(block) for block in response.content]
         messages.append({"role": "assistant", "content": assistant_content})
