@@ -1008,3 +1008,39 @@ export async function scryfallSets(): Promise<ScryfallSet[]> {
   cachedSets = sets;
   return sets;
 }
+
+// What the Doctor's model calls have used, from the backend's usage log. Costs are estimates from token
+// counts and published rates.
+export type UsageTotals = { calls: number; usd: number; input: number; output: number; cache_read: number; cache_write: number };
+export type UsageCall = {
+  at: string;
+  feature: string;
+  model: string;
+  input: number;
+  output: number;
+  cache_read: number;
+  cache_write: number;
+  usd: number;
+  seconds: number | null;
+  stop: string | null;
+};
+export type Usage = {
+  today_usd: number;
+  today: UsageTotals;
+  // null when no daily limit is set.
+  daily_budget_usd: number | null;
+  resets_in_seconds: number;
+  // Keyed by UTC date ("2026-11-09") and by feature ("chat", "structured:review_cuts").
+  by_day: Record<string, UsageTotals>;
+  by_feature: Record<string, UsageTotals>;
+  // Newest first.
+  recent: UsageCall[];
+  settings: { model: string; chat_effort: string; max_tool_rounds: number };
+};
+
+export async function getUsage(days: number, recent: number): Promise<Usage> {
+  const res = await safeFetch(`${API_BASE}/usage?days=${days}&recent=${recent}`);
+  if (!res) throw new Error("Couldn't reach the Deck Doctor backend. Is it running on port 8000?");
+  if (!res.ok) throw new Error("Couldn't load the usage.");
+  return res.json();
+}

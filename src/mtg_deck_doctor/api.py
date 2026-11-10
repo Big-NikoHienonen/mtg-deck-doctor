@@ -43,8 +43,9 @@ from mtg_deck_doctor.deck import (
     save_messages,
     unkeep_card,
 )
-from mtg_deck_doctor import ai_errors, deck_builder, wizard
+from mtg_deck_doctor import ai_errors, deck_builder, usage, wizard
 from mtg_deck_doctor.edhrec import get_commander_includes, peek_commander_includes
+from mtg_deck_doctor.usage import AiBudgetExceeded
 from mtg_deck_doctor.new_cards import (
     latest_sets,
     load_new_commanders,
@@ -54,6 +55,8 @@ from mtg_deck_doctor.new_cards import (
     save_new_commanders,
 )
 from mtg_deck_doctor.tool_loop import (
+    CHAT_EFFORT,
+    MAX_TOOL_ROUNDS,
     MODEL,
     StructuredLoopError,
     add_card,
@@ -66,7 +69,7 @@ from mtg_deck_doctor.tool_loop import (
     explain_commanders,
     pick_commanders,
     review_cuts,
-    client,
+    create_message,
     suggest_cards,
     swap_card,
 )
@@ -97,6 +100,13 @@ def deck_conflict_handler(request: Request, exc: DeckConflictError) -> JSONRespo
 # reaches the client as a typed error it can explain and act on, from any
 # endpoint that calls the model. Left unhandled it would be a bare 500, which
 # the browser reports as a network error (the response skips the CORS headers).
+@app.exception_handler(AiBudgetExceeded)
+def ai_budget_handler(request: Request, exc: AiBudgetExceeded) -> JSONResponse:
+    logger.warning("daily AI budget reached on %s %s: $%.2f of $%.2f", request.method, request.url.path, exc.spent, exc.limit)
+    status, body = ai_errors.describe_budget(exc.spent, exc.limit, exc.resets_in)
+    return JSONResponse(status_code=status, content=body)
+
+
 @app.exception_handler(anthropic.APIError)
 def ai_failure_handler(request: Request, exc: anthropic.APIError) -> JSONResponse:
     status, body = ai_errors.describe(exc)
@@ -119,7 +129,7 @@ def ai_status_endpoint() -> dict:
         checked_at, failure = _last_probe
         if time.monotonic() - checked_at >= _PROBE_REUSE_SECONDS:
             try:
-                client.messages.create(model=MODEL, max_tokens=1, messages=[{"role": "user", "content": "ping"}])
+                create_message("ping", max_tokens=1, messages=[{"role": "user", "content": "ping"}])
                 failure = None
             except anthropic.APIError as err:
                 failure = err
@@ -127,6 +137,16 @@ def ai_status_endpoint() -> dict:
     if failure is not None:
         raise failure
     return {"ok": True}
+
+
+@app.get("/usage")
+def usage_endpoint(days: int = 7, recent: int = 50) -> dict:
+    """What the Doctor's model calls have used and cost lately: by day and by feature, the newest
+    calls, today's limit if there is one, and the settings that shape the spending."""
+    return {
+        **usage.summary(max(1, min(days, 90)), max(0, min(recent, 500))),
+        "settings": {"model": MODEL, "chat_effort": CHAT_EFFORT, "max_tool_rounds": MAX_TOOL_ROUNDS},
+    }
 
 
 class ChatRequest(BaseModel):

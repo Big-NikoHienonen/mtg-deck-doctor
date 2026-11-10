@@ -39,6 +39,7 @@ import anthropic
 from mtg_deck_doctor import ai_errors, wizard
 from mtg_deck_doctor.card_cache import BASIC_LAND_NAMES, get_card_info, get_card_info_batch
 from mtg_deck_doctor.edhrec import get_commander_includes
+from mtg_deck_doctor.usage import AiBudgetExceeded
 from mtg_deck_doctor.commander_search import scryfall_candidates, with_edhrec
 from mtg_deck_doctor.tool_loop import (
     PHASE_KINDS,
@@ -157,6 +158,9 @@ def _run(build_id: str, retry: dict | None, step) -> None:
             _fail(build_id, 502, {"detail": "The Doctor didn't finish thinking that through.", "code": "build_error"}, retry)
         except anthropic.APIError as err:
             status, body = ai_errors.describe(err)
+            _fail(build_id, status, body, retry)
+        except AiBudgetExceeded as err:
+            status, body = ai_errors.describe_budget(err.spent, err.limit, err.resets_in)
             _fail(build_id, status, body, retry)
         except Exception:
             logger.exception("build step failed")

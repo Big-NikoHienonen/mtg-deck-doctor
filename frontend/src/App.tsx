@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
+import AdminPage from "./AdminPage";
 import HubView from "./HubView";
 import DeckView from "./DeckView";
 import CardSearchPage from "./CardSearchPage";
@@ -18,6 +19,7 @@ export default function App() {
       <Route path="/decks/:deckId" element={<DeckView />} />
       <Route path="/new/:buildId?" element={<DeckStudio />} />
       <Route path="/build/:buildId" element={<OldBuildLink />} />
+      <Route path="/admin" element={<AdminPage />} />
       <Route path="/search" element={<CardSearchPage />} />
       <Route path="/search/results" element={<CardSearchResultsPage />} />
     </Routes>

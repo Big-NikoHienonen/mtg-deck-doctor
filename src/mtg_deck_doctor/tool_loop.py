@@ -6,6 +6,8 @@ persistent Deck object it can only change through validated tools.
 import json
 import os
 import re
+import sys
+import time
 from pathlib import Path
 
 import httpx
@@ -15,6 +17,7 @@ from dotenv import load_dotenv
 from mtg_deck_doctor.card_cache import API_HEADERS, BASIC_LAND_NAMES, get_card_info, get_card_info_batch, peek_card_info
 from mtg_deck_doctor.deck import Deck, load_deck, refresh_if_stale, retry_on_conflict, save_deck, save_messages
 from mtg_deck_doctor.edhrec import fetch_commander_page, get_commander_includes
+from mtg_deck_doctor import usage
 
 load_dotenv()
 
@@ -33,7 +36,23 @@ COMMANDER_RULES_PRIMER = (Path("context") / "commander_basics.md").read_text()
 # card ability undercuts the app's whole point. Override to a cheaper/faster
 # model (e.g. claude-haiku-4-5-20251001) via .env when iterating on plumbing
 # rather than answer quality.
-MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5")
+def env_setting(name: str, default: str) -> str:
+    """An environment setting, or `default` when it is unset or blank — which is what a copied
+    .env.example leaves behind, and `os.environ.get(name, default)` would take for a real value."""
+    return os.environ.get(name, "").strip() or default
+
+
+MODEL = env_setting("ANTHROPIC_MODEL", "claude-sonnet-5")
+
+
+def create_message(feature: str, **kwargs):
+    """The one way the app calls the model: refuses once the day's budget is spent, and logs what
+    the call used under `feature` (see usage.py). Takes the arguments of `messages.create`."""
+    usage.check_budget()
+    started = time.monotonic()
+    response = client.messages.create(model=MODEL, **kwargs)
+    usage.record(feature, MODEL, getattr(response, "usage", None), getattr(response, "stop_reason", None), time.monotonic() - started)
+    return response
 
 # --- The tool menu -------------------------------------------------------
 # This is the JSON schema the model sees. It never gets your Python code,
@@ -517,9 +536,11 @@ def _run_structured_loop(
     response's budget on thinking.
     """
     messages = [{"role": "user", "content": user_message}]
+    # Logged under the name of the function that asked, so the usage page can tell the features apart.
+    feature = f"structured:{sys._getframe(1).f_code.co_name}"
     for _ in range(8):
-        response = client.messages.create(
-            model=MODEL,
+        response = create_message(
+            feature,
             max_tokens=max_tokens,
             system=system_prompt,
             tools=tools,
@@ -575,6 +596,7 @@ def suggest_cards(deck: Deck, count: int = 3) -> list[dict]:
         RECOMMENDATION_TOOLS,
         "return_recommendations",
         "recommendations",
+        effort="medium",
     )
 
     # Never trust the model's own compliance with "verify first" — re-check
@@ -1926,6 +1948,86 @@ def _without_dangling_tool_use(messages: list[dict]) -> list[dict]:
     return messages[:-1] if any(b.get("type") == "tool_use" for b in content) else messages
 
 
+# Model calls one user message may make. The last gets no tools and has to wrap up, so a message
+# that keeps calling tools ends in a reply instead of running up the bill. Real turns take 2 to 7;
+# the cap is a guard against a loop that never ends, not a limit on building a deck.
+def _rounds_setting() -> int:
+    try:
+        return max(2, int(env_setting("CHAT_MAX_TOOL_ROUNDS", "20")))
+    except ValueError:
+        return 20
+
+
+MAX_TOOL_ROUNDS = _rounds_setting()
+
+# How hard the model thinks on a chat turn. Anything else than a level the API knows is "medium".
+CHAT_EFFORT = env_setting("ANTHROPIC_CHAT_EFFORT", "medium").lower()
+if CHAT_EFFORT not in ("low", "medium", "high", "xhigh", "max"):
+    CHAT_EFFORT = "medium"
+
+# What the model is shown of earlier turns: at most this many turns, the current one included.
+HISTORY_TURNS = 20
+# Of the card lookups in earlier turns, the most recent few stay, so it still has their card text.
+KEPT_LOOKUPS = 12
+
+WRAP_UP_NOTE = (
+    "You have used all the tool calls available for this message. Do not call tools. Tell the user what you "
+    "did, what is still left to do, and that they can ask you to continue."
+)
+
+
+def _is_tool_result(message: dict) -> bool:
+    content = message["content"]
+    return message["role"] == "user" and isinstance(content, list) and any(b.get("type") == "tool_result" for b in content)
+
+
+def _starts_turn(message: dict) -> bool:
+    return message["role"] == "user" and not _is_tool_result(message)
+
+
+def compact_history(messages: list[dict]) -> list[dict]:
+    """`messages` as the model is shown them. The current turn (from the user's latest message on)
+    is sent whole, thinking and all, as the API needs. Earlier turns keep what was said, in both
+    directions, and the most recent card lookups; their thinking and other tool calls are dropped,
+    since the deck's current state is in the system prompt each time. At most HISTORY_TURNS turns
+    are shown. The stored conversation is not changed: this is only what is sent."""
+    starts = [i for i, m in enumerate(messages) if _starts_turn(m)]
+    if len(starts) < 2:
+        return messages
+    current = starts[-1]
+    older = messages[starts[max(0, len(starts) - HISTORY_TURNS)] : current]
+    lookups = [
+        b["id"]
+        for m in older
+        if m["role"] == "assistant" and isinstance(m["content"], list)
+        for b in m["content"]
+        if b.get("type") == "tool_use" and b.get("name") == "lookup_card"
+    ]
+    keep = set(lookups[-KEPT_LOOKUPS:])
+    compacted = []
+    for m in older:
+        if isinstance(m["content"], str):
+            compacted.append(m)
+            continue
+        blocks = [
+            b
+            for b in m["content"]
+            if b.get("type") == "text"
+            or (b.get("type") == "tool_use" and b["id"] in keep)
+            or (b.get("type") == "tool_result" and b["tool_use_id"] in keep)
+        ]
+        if blocks:
+            compacted.append({"role": m["role"], "content": blocks})
+    return [*compacted, *messages[current:]]
+
+
+def _with_wrap_up_note(messages: list[dict]) -> list[dict]:
+    """`messages` with the instruction to stop calling tools added to the last one, a user turn."""
+    last = messages[-1]
+    content = last["content"] if isinstance(last["content"], list) else [{"type": "text", "text": last["content"]}]
+    return [*messages[:-1], {"role": "user", "content": [*content, {"type": "text", "text": WRAP_UP_NOTE}]}]
+
+
 def run_conversation(deck: Deck, messages: list[dict], user_message: str) -> tuple[str, list[dict]]:
     """Runs the tool-calling loop for one user turn against `deck`, starting
     from `messages` (prior conversation history, [] for a new deck). Returns
@@ -1935,14 +2037,17 @@ def run_conversation(deck: Deck, messages: list[dict], user_message: str) -> tup
     """
     tool_implementations = make_tool_implementations(deck)
     messages = [*_without_dangling_tool_use(messages), {"role": "user", "content": user_message}]
+    rounds = 0
 
     while True:
+        rounds += 1
+        wrapping_up = rounds >= MAX_TOOL_ROUNDS
         # Rebuilt every iteration, not just once, so a mutation from an
         # earlier tool call this same turn is visible on the next one — and
         # the deck is brought up to date first, so an edit the user made by
         # hand while this turn was running is too.
         refresh_if_stale(deck)
-        system_prompt = (
+        stable_prompt = (
             "You are a Magic: The Gathering Commander deck-building "
             "assistant. Always use tools for card data, synergy "
             "suggestions, and deck changes — never rely on memory. "
@@ -1971,15 +2076,27 @@ def run_conversation(deck: Deck, messages: list[dict], user_message: str) -> tup
             "priced cards in bulk, ask first — then use search_cards' "
             "usd<= filter or sort by price_usd yourself to honor it. "
             "Use add_cards instead of many add_card calls when adding "
-            "more than a couple of cards at once.\n\n"
-            f"Current deck state:\n{describe_deck(deck)}"
+            "more than a couple of cards at once."
         )
-        response = client.messages.create(
-            model=MODEL,
+        # The instructions come first and are cached, so a turn pays full price for them once; the deck's
+        # state changes with every edit and comes after them.
+        system_prompt = [
+            {"type": "text", "text": stable_prompt, "cache_control": {"type": "ephemeral"}},
+            {"type": "text", "text": f"Current deck state:\n{describe_deck(deck)}"},
+        ]
+        request_messages = compact_history(messages)
+        if wrapping_up:
+            request_messages = _with_wrap_up_note(request_messages)
+        response = create_message(
+            "chat",
             max_tokens=CHAT_MAX_TOKENS,
             system=system_prompt,
             tools=TOOLS,
-            messages=messages,
+            messages=request_messages,
+            # Caches the conversation so far, so the next call of this turn pays full price only for what is new.
+            cache_control={"type": "ephemeral"},
+            **({"tool_choice": {"type": "none"}} if wrapping_up else {}),
+            output_config={"effort": CHAT_EFFORT},
         )
 
         # A tool call cut off at the limit is half-written, so it can't be answered, and saving it
@@ -1988,9 +2105,14 @@ def run_conversation(deck: Deck, messages: list[dict], user_message: str) -> tup
             raise ConversationCutOff("ran out of tokens in the middle of a tool call")
 
         assistant_content = [_serialize_block(block) for block in response.content]
+        if wrapping_up:
+            # No tools were on offer, so there should be no calls; none is kept, as it would have no result.
+            assistant_content = [b for b in assistant_content if b["type"] != "tool_use"]
+            if not any(b["type"] == "text" for b in assistant_content):
+                assistant_content.append({"type": "text", "text": "I ran out of steps before I could finish. Ask me to continue and I'll pick up from here."})
         messages.append({"role": "assistant", "content": assistant_content})
 
-        if response.stop_reason != "tool_use":
+        if wrapping_up or response.stop_reason != "tool_use":
             reply_text = "".join(
                 block["text"] for block in assistant_content if block["type"] == "text"
             )

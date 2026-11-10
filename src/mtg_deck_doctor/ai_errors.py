@@ -9,7 +9,7 @@ frontend can branch on, a plain message, and whether waiting helps.
 import anthropic
 
 # Codes whose cause only a person can fix — retrying changes nothing until they do.
-PERSISTENT = {"ai_credits", "ai_auth"}
+PERSISTENT = {"ai_credits", "ai_auth", "ai_budget"}
 
 _DEFAULT_WAIT = {"ai_rate_limited": 30, "ai_busy": 15, "ai_offline": 10, "ai_error": 10}
 
@@ -50,3 +50,15 @@ def describe(err: anthropic.APIError) -> tuple[int, dict]:
     if wait is not None:
         detail += f" Try again in {wait} seconds."
     return status, {"detail": detail, "code": code, "retry_after": wait}
+
+
+def describe_budget(spent: float, limit: float, resets_in: int) -> tuple[int, dict]:
+    """(HTTP status, JSON body) for a call refused because today's AI budget is spent. Like the
+    other codes only a person can clear, `retry_after` is None: waiting alone isn't the plan."""
+    hours = max(1, round(resets_in / 3600))
+    detail = (
+        f"The Doctor has used today's AI budget (${spent:.2f} of ${limit:.2f}). It resets at midnight UTC, "
+        f"in about {hours} {'hour' if hours == 1 else 'hours'}, or you can raise AI_DAILY_BUDGET_USD in the "
+        "backend's environment and restart it."
+    )
+    return 429, {"detail": detail, "code": "ai_budget", "retry_after": None}

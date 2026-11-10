@@ -80,6 +80,9 @@ export default function HubView() {
           <Link to="/new" className="btn" style={{ ...buttonStyle, textDecoration: "none", display: "inline-block" }}>
             New deck
           </Link>
+          <Link to="/admin" className="btn" style={{ ...buttonStyle, textDecoration: "none", display: "inline-block" }}>
+            Admin
+          </Link>
         </div>
       </header>
 
