@@ -10,6 +10,8 @@ import hashlib
 import json
 import os
 import random
+import re
+import secrets
 import threading
 import time
 import uuid
@@ -38,6 +40,10 @@ class Deck:
     # candidates. Names, not counts: it's about the card, not copies.
     keep: list[str] = field(default_factory=list)
     messages: list[dict] = field(default_factory=list)
+    # Set while the deck is shared by link: a random token that opens a read-only view of the deck
+    # (the commander and the cards, nothing else). It is not the deck's id, so holding it gives no
+    # way to edit the deck or to use the Doctor on it.
+    share_token: str | None = None
     updated_at: str = field(default_factory=_now)
     # Counts saves. save_deck only writes over the version it was loaded at,
     # so a copy that's gone stale can't silently overwrite newer changes.
@@ -249,6 +255,44 @@ def rename_deck(deck: Deck, name: str) -> Deck:
     deck.name = name.strip() or None
     save_deck(deck)
     return deck
+
+
+# What share_deck makes (16 random bytes, URL-safe) fits this; anything else can't be a token.
+SHARE_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_-]{16,64}")
+
+
+@retry_on_conflict
+def share_deck(deck: Deck) -> Deck:
+    """Turns the deck's share link on. Asking again keeps the same link."""
+    if not deck.share_token:
+        deck.share_token = secrets.token_urlsafe(16)
+        save_deck(deck)
+    return deck
+
+
+@retry_on_conflict
+def unshare_deck(deck: Deck) -> Deck:
+    """Turns the share link off. The old link stays dead, even if the deck is shared again."""
+    if deck.share_token:
+        deck.share_token = None
+        save_deck(deck)
+    return deck
+
+
+def find_shared_deck(token: str) -> Deck | None:
+    """The deck a share link opens, or None if no deck is shared under it. Tokens are compared in
+    constant time, and a file that can't be read is skipped rather than failing the lookup."""
+    if not SHARE_TOKEN_PATTERN.fullmatch(token) or not DECKS_DIR.exists():
+        return None
+    for path in DECKS_DIR.glob("*.json"):
+        try:
+            data = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        stored = data.get("share_token")
+        if isinstance(stored, str) and secrets.compare_digest(stored.encode(), token.encode()):
+            return Deck(**data)
+    return None
 
 
 @retry_on_conflict

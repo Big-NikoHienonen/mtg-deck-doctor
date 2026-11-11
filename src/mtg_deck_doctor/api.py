@@ -30,6 +30,7 @@ from mtg_deck_doctor.deck import (
     deck_fingerprint,
     delete_deck,
     duplicate_deck,
+    find_shared_deck,
     keep_card,
     list_decks,
     load_ai_result,
@@ -37,7 +38,9 @@ from mtg_deck_doctor.deck import (
     rename_deck,
     save_ai_result,
     save_messages,
+    share_deck,
     unkeep_card,
+    unshare_deck,
 )
 from mtg_deck_doctor import ai_errors, game_changers, usage
 from mtg_deck_doctor.edhrec import get_commander_includes, peek_commander_includes
@@ -273,6 +276,45 @@ def duplicate_deck_endpoint(deck_id: str) -> Deck:
     if copy is None:
         raise HTTPException(status_code=404, detail=f"no deck with id {deck_id!r}")
     return copy
+
+
+@app.post("/decks/{deck_id}/share")
+def share_deck_endpoint(deck_id: str) -> Deck:
+    """Turns on the deck's share link (the same one if it is already on). The deck comes back with
+    its `share_token`."""
+    return share_deck(_get_deck_or_404(deck_id))
+
+
+@app.delete("/decks/{deck_id}/share")
+def unshare_deck_endpoint(deck_id: str) -> Deck:
+    """Turns the link off for good: it opens nothing from then on, even if the deck is shared again."""
+    return unshare_deck(_get_deck_or_404(deck_id))
+
+
+class SharedDeck(BaseModel):
+    """What a share link shows: the list, and nothing that could be used to change the deck or to
+    use the Doctor on it. Not the deck's id, its conversation, or its keep list. A model, not the
+    deck, so a field added to the deck later isn't shared by accident."""
+
+    name: str | None
+    commander: str | None
+    commander_color_identity: list[str]
+    cards: list[str]
+    updated_at: str
+
+
+@app.get("/shared/{token}")
+def get_shared_deck_endpoint(token: str) -> SharedDeck:
+    deck = find_shared_deck(token)
+    if deck is None:
+        raise HTTPException(status_code=404, detail="This deck isn't shared, or its link was turned off.")
+    return SharedDeck(
+        name=deck.name,
+        commander=deck.commander,
+        commander_color_identity=deck.commander_color_identity,
+        cards=deck.cards,
+        updated_at=deck.updated_at,
+    )
 
 
 @app.post("/decks/{deck_id}/name")
