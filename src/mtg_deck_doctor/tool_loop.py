@@ -1,12 +1,14 @@
-"""MTG Deck Doctor's tool-calling loop. Claude drives Commander deck
-building through real Scryfall lookups and EDHREC synergy data, against a
-persistent Deck object it can only change through validated tools.
+"""MTG Deck Doctor's tool-calling loop. Claude advises on Commander decks
+through real Scryfall lookups and EDHREC synergy data, against a persistent
+Deck object. It proposes changes through a validated tool; the player applies
+each one.
 """
 
 import json
 import os
 import sys
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import httpx
@@ -53,9 +55,15 @@ def create_message(feature: str, **kwargs):
     usage.record(feature, MODEL, getattr(response, "usage", None), getattr(response, "stop_reason", None), time.monotonic() - started)
     return response
 
+
+# Changes one suggest_changes call may propose. A longer list is cut, and the reply says so.
+MAX_SUGGESTIONS = 30
+
 # --- The tool menu -------------------------------------------------------
 # This is the JSON schema the model sees. It never gets your Python code,
-# just this description of what it's allowed to ask for.
+# just this description of what it's allowed to ask for. The chat can look
+# things up and propose changes, but never makes one: the player applies each
+# with a click, through the same endpoints as editing by hand.
 TOOLS = [
     {
         "name": "lookup_card",
@@ -143,61 +151,34 @@ TOOLS = [
         },
     },
     {
-        "name": "set_commander",
-        "description": "Set the Commander for the deck currently being built. Verifies the card is real before setting it.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "name": {"type": "string", "description": "Exact commander card name"},
-            },
-            "required": ["name"],
-        },
-    },
-    {
-        "name": "add_card",
+        "name": "suggest_changes",
         "description": (
-            "Add a card to the deck currently being built, by exact name. "
-            "Verifies the card is real and rejects it if already in the "
-            "deck (Commander decks are singleton — one copy per card)."
+            "Propose changes to the deck: add a card, remove one, or change the commander. You cannot change "
+            "the deck yourself. The player sees each proposal as a button and applies it with one click, so "
+            "whenever you recommend a change, call this instead of only naming the card in your reply. Every "
+            "proposal is checked against the real rules (legality, color identity, singleton, deck size) and "
+            "the result says which were accepted and why the rest were not: fix a rejected one and call again, "
+            "or say why it can't be done. An accepted proposal is not a change yet, so never say a card was "
+            "added or removed."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "name": {"type": "string", "description": "Exact card name to add"},
-            },
-            "required": ["name"],
-        },
-    },
-    {
-        "name": "add_cards",
-        "description": (
-            "Add multiple cards to the deck at once, by exact name. Each "
-            "is validated independently exactly like add_card (legality, "
-            "color identity, singleton). Prefer this over calling "
-            "add_card repeatedly when adding several cards — returns "
-            "which succeeded and which failed with why."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "names": {
+                "changes": {
                     "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Exact card names to add",
+                    "description": f"At most {MAX_SUGGESTIONS} changes.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "action": {"type": "string", "enum": ["add", "remove", "commander"]},
+                            "name": {"type": "string", "description": "Exact card name"},
+                            "why": {"type": "string", "description": "One sentence on why, shown beside the button"},
+                        },
+                        "required": ["action", "name", "why"],
+                    },
                 },
             },
-            "required": ["names"],
-        },
-    },
-    {
-        "name": "remove_card",
-        "description": "Remove a card from the deck currently being built, by exact name.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "name": {"type": "string", "description": "Exact card name to remove"},
-            },
-            "required": ["name"],
+            "required": ["changes"],
         },
     },
 ]
@@ -327,8 +308,9 @@ MAX_NON_COMMANDER_CARDS = 99
 # validated logic is reusable both from the AI tool loop and directly from
 # manual REST endpoints (api.py) when the user edits the deck by hand —
 # one source of truth for legality/color-identity/singleton either way.
-@retry_on_conflict
-def set_commander(deck: Deck, name: str) -> dict:
+def _check_commander(name: str) -> dict:
+    """Whether a card can lead a deck, with no side effects: returns {"error": ...} or
+    {"card": <lookup_card result>}."""
     card = lookup_card(name)
     if "error" in card:
         return card
@@ -343,6 +325,15 @@ def set_commander(deck: Deck, name: str) -> dict:
                 "creature and its text doesn't say 'can be your commander'"
             )
         }
+    return {"card": card}
+
+
+@retry_on_conflict
+def set_commander(deck: Deck, name: str) -> dict:
+    checked = _check_commander(name)
+    if "error" in checked:
+        return checked
+    card = checked["card"]
     deck.commander = name
     deck.commander_color_identity = card["color_identity"]
     save_deck(deck)
@@ -451,6 +442,67 @@ def swap_card(deck: Deck, remove: str, add: str) -> dict:
 def check_swap(deck: Deck, remove: str, add: str) -> dict:
     """Same validation as swap_card, without changing anything."""
     return _check_swap(deck, remove, add, commit=False)
+
+
+def suggest_changes(deck: Deck, changes: object) -> dict:
+    """Checks the changes the Doctor proposes against `deck`, and changes nothing. Returns
+    {"accepted": [{"action", "name", "why", "oracle_text"}], "rejected": [{"action", "name", "error"}]},
+    each in the order proposed. Removals and a new commander count before additions, so a swap
+    isn't refused on a full deck; two additions can't both take the last slot. An accepted name is the
+    card's own spelling, so applying it adds what was checked."""
+    if not isinstance(changes, list):
+        return {"error": "changes must be a list of {action, name, why}"}
+    proposed = changes[:MAX_SUGGESTIONS]
+    # Checked against a copy, so each accepted change counts for the ones after it.
+    trial = replace(deck, cards=list(deck.cards))
+    outcomes: list[dict | None] = [None] * len(proposed)
+
+    def entry(change: object) -> tuple[str, str, str]:
+        item = change if isinstance(change, dict) else {}
+        return str(item.get("action", "")), str(item.get("name", "")).strip(), str(item.get("why", "")).strip()
+
+    for after_removals in (False, True):
+        for i, change in enumerate(proposed):
+            action, name, why = entry(change)
+            if (action == "add") != after_removals:
+                continue
+            if action not in ("add", "remove", "commander") or not name:
+                outcomes[i] = {"action": action, "name": name, "error": "each change needs an action (add, remove or commander) and a card name"}
+                continue
+            if action == "remove":
+                if name in trial.cards:
+                    trial.cards.remove(name)
+                    outcomes[i] = {"action": action, "name": name, "why": why}
+                else:
+                    outcomes[i] = {"action": action, "name": name, "error": f"{name!r} is not in the deck"}
+            elif action == "commander":
+                checked = _check_commander(name)
+                card = checked.get("card")
+                if card is None:
+                    outcomes[i] = {"action": action, "name": name, "error": checked["error"]}
+                elif card["name"] == trial.commander:
+                    outcomes[i] = {"action": action, "name": name, "error": f"{card['name']!r} is already the commander"}
+                else:
+                    trial.commander, trial.commander_color_identity = card["name"], card["color_identity"]
+                    outcomes[i] = {"action": action, "name": card["name"], "why": why, "oracle_text": card["oracle_text"]}
+            else:
+                checked = _check_addable(trial, name)
+                card = checked.get("card")
+                if card is None:
+                    outcomes[i] = {"action": action, "name": name, "error": checked["error"]}
+                elif card["name"] not in BASIC_LAND_NAMES and (card["name"] in trial.cards or card["name"] == trial.commander):
+                    outcomes[i] = {"action": action, "name": name, "error": f"{card['name']!r} is already in the deck (singleton, except basic lands)"}
+                else:
+                    trial.cards.append(card["name"])
+                    outcomes[i] = {"action": action, "name": card["name"], "why": why, "oracle_text": card["oracle_text"]}
+
+    result: dict = {
+        "accepted": [o for o in outcomes if o and "error" not in o],
+        "rejected": [o for o in outcomes if o and "error" in o],
+    }
+    if len(changes) > MAX_SUGGESTIONS:
+        result["note"] = f"Only the first {MAX_SUGGESTIONS} changes were considered; the other {len(changes) - MAX_SUGGESTIONS} were left out."
+    return result
 
 
 RETURN_RECOMMENDATIONS_TOOL = {
@@ -1120,10 +1172,7 @@ def make_tool_implementations(deck: Deck) -> dict:
         "search_cards": search_cards,
         "find_synergies": find_synergies,
         "get_edhrec_categories": get_edhrec_categories,
-        "set_commander": lambda name: set_commander(deck, name),
-        "add_card": lambda name: add_card(deck, name),
-        "add_cards": lambda names: add_cards(deck, names),
-        "remove_card": lambda name: remove_card(deck, name),
+        "suggest_changes": lambda changes: suggest_changes(deck, changes),
     }
 
 
@@ -1276,8 +1325,8 @@ def run_conversation(deck: Deck, messages: list[dict], user_message: str) -> tup
         refresh_if_stale(deck)
         stable_prompt = (
             "You are a Magic: The Gathering Commander deck-building "
-            "assistant. Always use tools for card data, synergy "
-            "suggestions, and deck changes — never rely on memory. "
+            "assistant. Always use tools for card data and synergy "
+            "suggestions — never rely on memory. "
             "When you describe what a card does (a new commander, a card "
             "you just added, anything else), base that description ONLY "
             "on the 'oracle_text' field in the tool result you received "
@@ -1286,24 +1335,28 @@ def run_conversation(deck: Deck, messages: list[dict], user_message: str) -> tup
             "about to describe has no oracle_text, call lookup_card for "
             "that exact name first rather than guessing.\n\n"
             f"{COMMANDER_RULES_PRIMER}\n\n"
-            "Strict output rule for add_card: if the tool result has no "
-            "'error' key, the call succeeded — your reply's first "
-            "sentence MUST start with the literal word 'Added'. The exact "
-            "phrase 'already in' is BANNED from any reply describing a "
-            "successful add_card call.\n\n"
+            "You cannot change the deck yourself. To add a card, remove "
+            "one, or change the commander, call suggest_changes: the "
+            "player sees each proposal as a button and applies it with "
+            "one click. Always propose changes that way, not only by "
+            "naming the cards in your reply, and say in your reply what "
+            "you propose and why. A proposal is not a change, so never "
+            "say a card was added or removed. If suggest_changes rejects "
+            "a proposal, fix it and call again, or tell the player why "
+            "it can't be done.\n\n"
             "When building a deck from scratch or filling out an "
-            "incomplete one, target roughly this composition out of 99 "
+            "incomplete one, aim for roughly this composition out of 99 "
             "non-commander cards: 36-38 lands (use search_cards or "
             "get_edhrec_categories' Lands/Utility Lands for real "
             "candidates — never invent land names), ~10 ramp/mana "
             "rocks, ~10 removal or interaction, ~8-10 card draw or "
             "advantage, and the rest synergy pieces and win conditions. "
             "If the user hasn't stated a budget preference (cheapest / "
-            "best-performing / a middle ground) before you start adding "
+            "best-performing / a middle ground) before you propose "
             "priced cards in bulk, ask first — then use search_cards' "
             "usd<= filter or sort by price_usd yourself to honor it. "
-            "Use add_cards instead of many add_card calls when adding "
-            "more than a couple of cards at once."
+            f"Put related proposals in one suggest_changes call (up to {MAX_SUGGESTIONS} changes) "
+            "rather than calling it once per card."
         )
         # The instructions come first and are cached, so a turn pays full price for them once; the deck's
         # state changes with every edit and comes after them.

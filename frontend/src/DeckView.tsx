@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import {
@@ -8,7 +8,6 @@ import {
   bulkAddCards,
   deleteDeck,
   duplicateDeck,
-  extractText,
   getCardInfoBatch,
   getCollection,
   getCommanderIncludes,
@@ -27,6 +26,8 @@ import AiNotice, { useSecondsUntil } from "./AiNotice";
 import CardModal from "./CardModal";
 import CardPreview from "./CardPreview";
 import CardSearchBox from "./CardSearchBox";
+import ChatSuggestions from "./ChatSuggestions";
+import { chatItems, type Suggestion } from "./chatMessages";
 import CutSuggestions from "./CutSuggestions";
 import { replacementPool } from "./cutRanking";
 import DeckControls, { type ListSettings } from "./DeckControls";
@@ -368,6 +369,15 @@ export default function DeckView() {
     setDeck(await addCard(deck.id, name));
   }
 
+  // A change the Doctor proposed in the chat, made on the player's click. A refusal throws, and the
+  // suggestion shows why.
+  async function handleApplySuggestion(s: Suggestion) {
+    if (!deck) return;
+    if (s.action === "add") setDeck(await addCard(deck.id, s.name));
+    else if (s.action === "remove") await handleRemoveOne(s.name);
+    else setDeck(await setCommander(deck.id, s.name));
+  }
+
   // Builds from the same cardCounts/cardInfo the ledger itself renders
   // from, so the export matches what's on screen exactly, categories and
   // all.
@@ -533,11 +543,9 @@ export default function DeckView() {
     if (nextName) setModalCard(nextName);
   }
 
-  const visibleMessages = (deck?.messages ?? [])
-    .map((m) => ({ role: m.role, text: extractText(m.content) }))
-    .filter((m) => m.text.trim().length > 0);
+  const visibleMessages = chatItems(deck?.messages ?? []);
   if (pendingMessage) {
-    visibleMessages.push({ role: "user", text: pendingMessage });
+    visibleMessages.push({ role: "user", text: pendingMessage, suggestions: [] });
   }
 
   const title = renaming ? (
@@ -773,23 +781,27 @@ export default function DeckView() {
         <div className="dv-narrow">
           <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {visibleMessages.map((m, i) => (
-              <div
-                key={i}
-                style={{
-                  alignSelf: m.role === "user" ? "flex-end" : "flex-start",
-                  maxWidth: "85%",
-                  background: m.role === "user" ? "var(--user-bubble)" : "var(--surface)",
-                  border: m.role === "user" ? "none" : "1px solid var(--border)",
-                  fontStyle: m.role === "user" ? "italic" : "normal",
-                  padding: "10px 14px",
-                  borderRadius: 4,
-                  fontSize: 15,
-                  lineHeight: 1.5,
-                  whiteSpace: m.role === "user" ? "pre-wrap" : "normal",
-                }}
-              >
-                {m.role === "user" ? m.text : <ReactMarkdown>{m.text}</ReactMarkdown>}
-              </div>
+              <Fragment key={i}>
+                {m.text.trim() && (
+                  <div
+                    style={{
+                      alignSelf: m.role === "user" ? "flex-end" : "flex-start",
+                      maxWidth: "85%",
+                      background: m.role === "user" ? "var(--user-bubble)" : "var(--surface)",
+                      border: m.role === "user" ? "none" : "1px solid var(--border)",
+                      fontStyle: m.role === "user" ? "italic" : "normal",
+                      padding: "10px 14px",
+                      borderRadius: 4,
+                      fontSize: 15,
+                      lineHeight: 1.5,
+                      whiteSpace: m.role === "user" ? "pre-wrap" : "normal",
+                    }}
+                  >
+                    {m.role === "user" ? m.text : <ReactMarkdown>{m.text}</ReactMarkdown>}
+                  </div>
+                )}
+                {deck && m.suggestions.length > 0 && <ChatSuggestions suggestions={m.suggestions} deck={deck} onApply={handleApplySuggestion} />}
+              </Fragment>
             ))}
             {sending && <div style={{ color: "var(--text-muted)", fontSize: 14 }}>The Doctor is thinking…</div>}
             <div ref={bottomRef} />
