@@ -12,7 +12,7 @@ Nothing open.
 
 ### MDD-1: Browse all new cards from the latest sets
 
-Done: 2026-11-11 (option 1, plus a query box)
+Done: 2026-11-11 (option 1, plus a query box), in `3d86674`
 
 **What shipped.**
 
