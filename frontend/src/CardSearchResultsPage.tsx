@@ -21,7 +21,7 @@ import CardModal from "./CardModal";
 import CardImage from "./CardImage";
 import { loadSelectedPrintings, saveSelectedPrinting, type SelectedPrinting } from "./printings";
 import { isAddableToDeck } from "./searchQuery";
-import { buttonStyle, eyebrowStyle } from "./styles";
+import { buttonStyle, eyebrowStyle, inputStyle } from "./styles";
 
 const SORT_FIELDS: { value: SortOrder; label: string }[] = [
   { value: "color", label: "Color" },
@@ -143,7 +143,13 @@ export default function CardSearchResultsPage() {
         setTotalCards(result.totalCards);
         setHasMore(result.hasMore);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : "Search failed."))
+      .catch((err) => {
+        // The results of the search before this one would read as this one's.
+        setCards(null);
+        setTotalCards(0);
+        setHasMore(false);
+        setError(err instanceof Error ? err.message : "Search failed.");
+      })
       .finally(() => setLoading(false));
   }, [onlyCollection, query, page, order, dir]);
 
@@ -183,6 +189,18 @@ export default function CardSearchResultsPage() {
     const params = new URLSearchParams(searchParams);
     params.set("order", nextOrder);
     params.set("dir", nextDir);
+    params.set("page", "1");
+    setSearchParams(params);
+    window.scrollTo({ top: 0 });
+  }
+
+  // Runs the query as typed, from the first page. Scryfall's own syntax, so a list can be narrowed
+  // by adding to it ("c:b", "t:creature", "cmc<=3") or widened by taking from it ("-is:reprint").
+  function runQuery(text: string) {
+    if (!text && !onlyCollection) return;
+    const params = new URLSearchParams(searchParams);
+    if (text) params.set("q", text);
+    else params.delete("q");
     params.set("page", "1");
     setSearchParams(params);
     window.scrollTo({ top: 0 });
@@ -288,6 +306,31 @@ export default function CardSearchResultsPage() {
                 : `${totalCards} card${totalCards === 1 ? "" : "s"} found`}
         </div>
       </header>
+
+      {/* Uncontrolled, and keyed by the query so it shows the one that ran when the address changes. */}
+      <form
+        key={query}
+        onSubmit={(e) => {
+          e.preventDefault();
+          runQuery(String(new FormData(e.currentTarget).get("q") ?? "").trim());
+        }}
+        style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}
+      >
+        <input
+          name="q"
+          defaultValue={query}
+          aria-label="Scryfall search query"
+          placeholder="Scryfall search, for example c:b t:creature cmc<=3"
+          spellCheck={false}
+          style={{ ...inputStyle, flex: "1 1 320px" }}
+        />
+        <button type="submit" className="btn" style={buttonStyle}>
+          Search
+        </button>
+        <a href="https://scryfall.com/docs/syntax" target="_blank" rel="noreferrer" style={{ fontSize: 13, color: "var(--text-muted)" }}>
+          Syntax
+        </a>
+      </form>
 
       <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>

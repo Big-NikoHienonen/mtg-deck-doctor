@@ -6,6 +6,7 @@ import DoctorsOrders from "./DoctorsOrders";
 import NewCards from "./NewCards";
 import NewCommanders from "./NewCommanders";
 import NewDeckModal from "./NewDeckModal";
+import NewSetLinks from "./NewSetLinks";
 import { buttonStyle, eyebrowStyle } from "./styles";
 
 // The landing page: what's new that could work in your decks, then the decks
@@ -91,6 +92,7 @@ export default function HubView() {
       {error && <div style={{ color: "var(--danger)", fontSize: 14 }}>{error}</div>}
       {hub === null && !error && <div style={{ color: "var(--text-muted)", fontSize: 14 }}>Loading…</div>}
 
+      {hub && <NewSetLinks hub={hub} />}
       {hub && <NewCards hub={hub} onDiscoveries={handleDiscoveries} />}
       {hub && <NewCommanders hub={hub} onPicks={handleCommanders} />}
 

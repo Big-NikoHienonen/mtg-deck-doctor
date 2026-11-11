@@ -681,6 +681,11 @@ export async function scryfallSearchCards(
   const res = await safeFetch(`https://api.scryfall.com/cards/search?${params.toString()}`);
   if (!res) throw new Error("Search failed. Try again.");
   if (res.status === 404) return { cards: [], hasMore: false, totalCards: 0 };
+  if (res.status === 400) {
+    // A query Scryfall can't read: its reason ("unknown keyword", an unclosed bracket) says what to fix.
+    const body = await res.json().catch(() => null);
+    throw new Error(typeof body?.details === "string" ? body.details : "Search failed. Try again.");
+  }
   if (!res.ok) throw new Error("Search failed. Try again.");
   const data = await res.json();
   return {
