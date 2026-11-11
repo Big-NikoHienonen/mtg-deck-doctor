@@ -517,6 +517,8 @@ export default function DeckView() {
   const orderedNames = groups.flatMap((g) => g.rows.filter((r) => !r.isCommander).map((r) => r.name));
   const stats = deckStats(rows, (name) => cardInfo[name]?.manaCost);
   const modalIndex = modalCard ? orderedNames.indexOf(modalCard) : -1;
+  // The commander isn't one of the deck's counted cards, so its modal is a read-only view of the card.
+  const modalIsCommander = !!modalCard && modalCard === deck?.commander;
 
   const deckNames = new Set(deck?.commander ? [...(deck?.cards ?? []), deck.commander] : (deck?.cards ?? []));
   const stapleCount =
@@ -572,6 +574,7 @@ export default function DeckView() {
         commanderId={deck?.commander ? cardInfo[deck.commander]?.id : null}
         printing={deck?.commander ? selectedPrintings[deck.commander] : undefined}
         showCommander={!!deck?.name}
+        onOpenCommander={() => deck?.commander && setModalCard(deck.commander)}
         title={title}
         colorIdentity={deck?.commander_color_identity ?? []}
         cardCount={totalCardCount}
@@ -639,7 +642,7 @@ export default function DeckView() {
               cardId={previewName ? (hoverIds[previewName] ?? cardInfo[previewName]?.id) : undefined}
               printing={previewName ? selectedPrintings[previewName] : undefined}
               priceUsd={previewName ? priceFor(previewName) : undefined}
-              inDeck={!!previewName && cardCounts.has(previewName)}
+              inDeck={!!previewName && (cardCounts.has(previewName) || previewName === deck.commander)}
               owned={!!previewName && ownedCards.has(previewName)}
               onToggleOwned={() => previewName && handleToggleOwned(previewName)}
               onOpen={() => previewName && setModalCard(previewName)}
@@ -724,22 +727,27 @@ export default function DeckView() {
         </div>
       )}
 
-      {deck && modalCard && cardCounts.has(modalCard) && (
+      {deck && modalCard && (modalIsCommander || cardCounts.has(modalCard)) && (
         <CardModal
           name={modalCard}
           cardId={cardInfo[modalCard]?.id}
-          count={cardCounts.get(modalCard)!}
           info={cardInfo[modalCard]}
           printing={selectedPrintings[modalCard]}
           onChangePrinting={(printing) => handleChangePrinting(modalCard, printing)}
-          onAddOne={async () => setDeck(await addCard(deck.id, modalCard))}
-          onAddMany={async (quantity) => {
-            const result = await bulkAddCards(deck.id, modalCard, quantity);
-            setDeck(result.deck);
-            return { added: result.added, failed: result.failed, error: result.error };
-          }}
-          onRemoveOne={() => handleRemoveOne(modalCard)}
-          onRemoveAll={() => handleRemoveAll(modalCard, cardCounts.get(modalCard)!)}
+          isCommander={modalIsCommander}
+          {...(modalIsCommander
+            ? {}
+            : {
+                count: cardCounts.get(modalCard)!,
+                onAddOne: async () => setDeck(await addCard(deck.id, modalCard)),
+                onAddMany: async (quantity: number) => {
+                  const result = await bulkAddCards(deck.id, modalCard, quantity);
+                  setDeck(result.deck);
+                  return { added: result.added, failed: result.failed, error: result.error };
+                },
+                onRemoveOne: () => handleRemoveOne(modalCard),
+                onRemoveAll: () => handleRemoveAll(modalCard, cardCounts.get(modalCard)!),
+              })}
           owned={ownedCards.has(modalCard)}
           onToggleOwned={() => handleToggleOwned(modalCard)}
           onNavigate={handleNavigateModal}

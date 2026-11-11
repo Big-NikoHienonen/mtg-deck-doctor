@@ -53,7 +53,7 @@ function TextList({ groups, view, options, owned, printings, onHover, onOpen, on
   };
 
   const row = (r: DeckRow) => (
-    <li key={r.name} className="dv-row" data-static={r.isCommander} onMouseEnter={() => onHover(r.name)} onClick={() => !r.isCommander && onOpen(r.name)}>
+    <li key={r.name} className="dv-row" onMouseEnter={() => onHover(r.name)} onClick={() => onOpen(r.name)}>
       <span className="dv-qty">{r.count}</span>
       <span className={`dv-name${r.info ? "" : " dv-unknown"}`}>{r.name}</span>
       {printings[r.name]?.foil && (
@@ -130,7 +130,7 @@ function Grid({ groups, printings, onHover, onOpen, collapsed, toggle }: Props &
           {!collapsed.has(g.key) && (
             <div className="dv-grid">
               {g.rows.map((r) => (
-                <div key={r.name} className="dv-tile" data-static={r.isCommander} onMouseEnter={() => onHover(r.name)} onClick={() => !r.isCommander && onOpen(r.name)}>
+                <div key={r.name} className="dv-tile" onMouseEnter={() => onHover(r.name)} onClick={() => onOpen(r.name)}>
                   <Art row={r} printings={printings} />
                   {r.count > 1 && <span className="dv-qty-badge">×{r.count}</span>}
                 </div>
@@ -154,7 +154,7 @@ function Stacks({ groups, printings, onHover, onOpen, collapsed, toggle }: Props
           </ul>
           {!collapsed.has(g.key) &&
             g.rows.map((r) => (
-              <div key={r.name} className="dv-stack-card" data-static={r.isCommander} onMouseEnter={() => onHover(r.name)} onClick={() => !r.isCommander && onOpen(r.name)}>
+              <div key={r.name} className="dv-stack-card" onMouseEnter={() => onHover(r.name)} onClick={() => onOpen(r.name)}>
                 <Art row={r} printings={printings} />
                 {r.count > 1 && <span className="dv-qty-badge">×{r.count}</span>}
               </div>

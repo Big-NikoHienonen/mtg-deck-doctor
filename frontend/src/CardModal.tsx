@@ -38,6 +38,7 @@ export default function CardModal({
   onNavigate,
   hasPrevious,
   hasNext,
+  isCommander,
 }: {
   name: string;
   // The card's Scryfall id, for its art. Passed by the caller since it
@@ -59,6 +60,8 @@ export default function CardModal({
   onNavigate?: (direction: "prev" | "next") => void;
   hasPrevious?: boolean;
   hasNext?: boolean;
+  // The deck's commander: shown as such instead of a copy count, with no add or remove controls.
+  isCommander?: boolean;
   // Only passed from a context with no single fixed deck (the card-search
   // page) — lets the viewer pick which deck this card should go into right
   // here, instead of the modal being scoped to whatever deck the page
@@ -326,6 +329,8 @@ export default function CardModal({
                 </select>
               </div>
             )}
+
+            {isCommander && <div style={{ fontSize: 14, fontWeight: 600 }}>Commander of this deck</div>}
 
             {hasDeckContext && (
               <div style={{ fontSize: 14, fontWeight: 600 }}>

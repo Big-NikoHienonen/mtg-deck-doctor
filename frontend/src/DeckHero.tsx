@@ -10,6 +10,7 @@ export default function DeckHero({
   commanderId,
   printing,
   showCommander,
+  onOpenCommander,
   title,
   colorIdentity,
   cardCount,
@@ -23,6 +24,8 @@ export default function DeckHero({
   printing: SelectedPrinting | undefined;
   // Whether to name the commander above the title (when the deck has a name of its own).
   showCommander: boolean;
+  // Opens the commander's card details.
+  onOpenCommander: () => void;
   // The name, as a heading; the page decides how it is renamed.
   title: ReactNode;
   colorIdentity: string[];
@@ -42,10 +45,10 @@ export default function DeckHero({
         </Link>
         <div className="dv-spacer" />
         {showCommander && commander && (
-          <div className="dv-owner">
+          <button type="button" className="dv-owner" onClick={onOpenCommander}>
             {art && <span className="dv-avatar" style={{ backgroundImage: `url(${art})` }} />}
             {commander}
-          </div>
+          </button>
         )}
         {title}
         <div className="dv-badges">

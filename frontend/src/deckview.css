@@ -120,6 +120,17 @@
   font-size: 16px;
   font-weight: 500;
   color: rgba(255, 236, 214, 0.9);
+  /* A button, so it opens the commander's details. */
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.dv-owner:hover {
+  text-decoration: underline;
 }
 
 .dv-avatar {
@@ -564,18 +575,6 @@
 .dv-act-space {
   flex: none;
   width: 22px;
-}
-
-.dv [data-static="true"] {
-  cursor: default;
-}
-
-.dv-row[data-static="true"]:hover {
-  background: none;
-}
-
-.dv-row[data-static="true"]:hover .dv-name {
-  text-decoration: none;
 }
 
 .dv-act {
