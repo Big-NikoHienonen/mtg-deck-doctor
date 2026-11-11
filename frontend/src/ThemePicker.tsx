@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { THEMES, useTheme } from "./themes";
 import "./themepicker.css";
 
-// A small control in the corner of every page: pick the plane the app looks like.
+// A small control in the app bar: pick the plane the app looks like.
 export default function ThemePicker() {
   const [id, setTheme] = useTheme();
   const [open, setOpen] = useState(false);
@@ -31,7 +31,7 @@ export default function ThemePicker() {
             <i key={i} style={{ background: c }} />
           ))}
         </span>
-        {current.name}
+        <span className="tp-name">{current.name}</span>
       </button>
       {open && (
         <div className="tp-panel" role="dialog" aria-label="Choose a theme">

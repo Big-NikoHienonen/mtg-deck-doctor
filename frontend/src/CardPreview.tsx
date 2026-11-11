@@ -22,7 +22,7 @@ export default function CardPreview({
   priceUsd?: string | null;
 }) {
   return (
-    <div style={{ position: "sticky", top: 16, width: 240, flexShrink: 0, alignSelf: "flex-start" }}>
+    <div style={{ position: "sticky", top: "calc(var(--app-bar-height) + 16px)", width: 240, flexShrink: 0, alignSelf: "flex-start" }}>
       <div style={eyebrowStyle}>PREVIEW</div>
       {name ? (
         <>

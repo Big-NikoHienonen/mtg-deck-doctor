@@ -19,7 +19,7 @@
   --dv-title-spacing: -0.01em;
 }
 
-#root.dv-wide {
+.page.dv-wide {
   max-width: none;
   padding: 0 0 88px;
 }
@@ -284,7 +284,7 @@
 
 .dv-side {
   position: sticky;
-  top: 16px;
+  top: calc(var(--app-bar-height) + 16px);
   flex: none;
   width: 251px;
   display: flex;

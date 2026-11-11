@@ -28,7 +28,8 @@ body {
   font-family: "Source Serif 4", serif;
 }
 
-#root {
+/* Under the bar (AppBar), the page: a column of its own, which the deck page widens. */
+.page {
   max-width: 980px;
   margin: 0 auto;
   padding: 32px 24px 64px;

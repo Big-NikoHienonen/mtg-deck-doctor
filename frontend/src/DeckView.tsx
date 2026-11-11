@@ -147,9 +147,9 @@ export default function DeckView() {
 
   // The deck page is wider than the rest of the app.
   useEffect(() => {
-    const root = document.getElementById("root");
-    root?.classList.add("dv-wide");
-    return () => root?.classList.remove("dv-wide");
+    const page = document.querySelector(".page");
+    page?.classList.add("dv-wide");
+    return () => page?.classList.remove("dv-wide");
   }, []);
 
   useEffect(() => {

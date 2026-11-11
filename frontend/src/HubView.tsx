@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { getHub, type DeckDiscoveries, type Hub, type NewCommanders as CommanderPicks } from "./api";
 import DeckTile from "./DeckTile";
 import DoctorsOrders from "./DoctorsOrders";
 import NewCards from "./NewCards";
 import NewCommanders from "./NewCommanders";
-import NewDeckModal from "./NewDeckModal";
 import NewSetLinks from "./NewSetLinks";
 import { buttonStyle, eyebrowStyle } from "./styles";
 
@@ -15,7 +13,6 @@ import { buttonStyle, eyebrowStyle } from "./styles";
 export default function HubView() {
   const [hub, setHub] = useState<Hub | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [newDeckOpen, setNewDeckOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -48,19 +45,14 @@ export default function HubView() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
-      <header
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          borderBottom: "1px solid var(--border)",
-          paddingBottom: 16,
-        }}
-      >
-        <div style={eyebrowStyle}>MTG DECK DOCTOR</div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+      {error && <div style={{ color: "var(--danger)", fontSize: 14 }}>{error}</div>}
+      {hub === null && !error && <div style={{ color: "var(--text-muted)", fontSize: 14 }}>Loading…</div>}
+
+      {hub && ((hub.latest_sets?.releases.length ?? 0) > 0 || hub.decks.length > 0) && (
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <NewSetLinks hub={hub} />
           {/* The decks sit below the new cards and commanders, so this is the way to them. */}
-          {hub && hub.decks.length > 0 && (
+          {hub.decks.length > 0 && (
             <button
               type="button"
               className="btn"
@@ -70,34 +62,13 @@ export default function HubView() {
               Your decks ({hub.decks.length})
             </button>
           )}
-          <Link
-            to="/search/results?collection=1"
-            className="btn"
-            style={{ ...buttonStyle, textDecoration: "none", display: "inline-block" }}
-          >
-            My collection
-          </Link>
-          <Link to="/search" className="btn" style={{ ...buttonStyle, textDecoration: "none", display: "inline-block" }}>
-            Search cards
-          </Link>
-          <button type="button" className="btn" style={buttonStyle} onClick={() => setNewDeckOpen(true)}>
-            New deck
-          </button>
-          <Link to="/admin" className="btn" style={{ ...buttonStyle, textDecoration: "none", display: "inline-block" }}>
-            Admin
-          </Link>
         </div>
-      </header>
-
-      {error && <div style={{ color: "var(--danger)", fontSize: 14 }}>{error}</div>}
-      {hub === null && !error && <div style={{ color: "var(--text-muted)", fontSize: 14 }}>Loading…</div>}
-
-      {hub && <NewSetLinks hub={hub} />}
+      )}
       {hub && <NewCards hub={hub} onDiscoveries={handleDiscoveries} />}
       {hub && <NewCommanders hub={hub} onPicks={handleCommanders} />}
 
       {hub && (
-        <section id="your-decks" style={{ scrollMarginTop: 16 }}>
+        <section id="your-decks" style={{ scrollMarginTop: "calc(var(--app-bar-height) + 16px)" }}>
           <div style={{ ...eyebrowStyle, fontSize: 12, marginBottom: 12 }}>YOUR DECKS</div>
           {hub.decks.length === 0 ? (
             <div style={{ color: "var(--text-muted)", fontSize: 14 }}>No decks yet — start one with "New deck".</div>
@@ -122,7 +93,6 @@ export default function HubView() {
         </details>
       )}
 
-      {newDeckOpen && <NewDeckModal onClose={() => setNewDeckOpen(false)} />}
     </div>
   );
 }
