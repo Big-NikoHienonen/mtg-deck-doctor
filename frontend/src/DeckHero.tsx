@@ -11,6 +11,7 @@ export default function DeckHero({
   printing,
   showCommander,
   onOpenCommander,
+  showBack = true,
   title,
   colorIdentity,
   cardCount,
@@ -26,6 +27,8 @@ export default function DeckHero({
   showCommander: boolean;
   // Opens the commander's card details.
   onOpenCommander: () => void;
+  // The way back to the owner's decks. Left off for someone looking at a shared deck.
+  showBack?: boolean;
   // The name, as a heading; the page decides how it is renamed.
   title: ReactNode;
   colorIdentity: string[];
@@ -40,9 +43,11 @@ export default function DeckHero({
     <header className="dv-hero">
       {art && <div className="dv-hero-art" style={{ backgroundImage: `url(${art})` }} />}
       <div className="dv-container dv-hero-body">
-        <Link to="/" className="dv-back">
-          ← ALL DECKS
-        </Link>
+        {showBack ? (
+          <Link to="/" className="dv-back">
+            ← ALL DECKS
+          </Link>
+        ) : null}
         <div className="dv-spacer" />
         {showCommander && commander && (
           <button type="button" className="dv-owner" onClick={onOpenCommander}>

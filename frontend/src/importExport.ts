@@ -41,7 +41,7 @@ export function parseDecklist(text: string): ParsedImportLine[] {
 // MTGGoldfish's own import boxes. Groups by the same category the ledger
 // itself shows, so what you see on screen is what you get in the export.
 export function buildDecklistText(
-  deck: Deck,
+  deck: Pick<Deck, "commander">,
   cardCounts: Map<string, number>,
   cardInfo: Record<string, CardInfo>,
 ): string {

@@ -59,6 +59,8 @@ export type Deck = {
   // Cards the owner marked as keepers — never offered as cut candidates.
   keep: string[];
   messages: Message[];
+  // Set while the deck is shared by link: the token in the link (/s/<token>). Only the owner sees it.
+  share_token: string | null;
   updated_at: string;
   // Counts saves; the backend refuses to save over a version it hasn't seen.
   version: number;
@@ -106,6 +108,40 @@ export async function duplicateDeck(id: string): Promise<Deck> {
 
 export async function getDeck(id: string): Promise<Deck | null> {
   const res = await safeFetch(`${API_BASE}/decks/${id}`);
+  if (!res) throw new Error("failed to load deck");
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error("failed to load deck");
+  return res.json();
+}
+
+// Turns on the deck's share link (the same one if it is already on), or off for good. Off, the old link
+// opens nothing, even if the deck is shared again.
+export async function shareDeck(id: string): Promise<Deck> {
+  return changeSharing(id, "POST");
+}
+
+export async function unshareDeck(id: string): Promise<Deck> {
+  return changeSharing(id, "DELETE");
+}
+
+async function changeSharing(id: string, method: "POST" | "DELETE"): Promise<Deck> {
+  const res = await safeFetch(`${API_BASE}/decks/${id}/share`, { method });
+  if (!res || !res.ok) throw new Error("Couldn't change whether this deck is shared. Try again.");
+  return res.json();
+}
+
+// What a share link shows: the list, and nothing that could change the deck or use the Doctor on it.
+export type SharedDeck = {
+  name: string | null;
+  commander: string | null;
+  commander_color_identity: string[];
+  cards: string[];
+  updated_at: string;
+};
+
+// The deck a share link opens, or null if there is none: the link was never shared, or was turned off.
+export async function getSharedDeck(token: string): Promise<SharedDeck | null> {
+  const res = await safeFetch(`${API_BASE}/shared/${encodeURIComponent(token)}`);
   if (!res) throw new Error("failed to load deck");
   if (res.status === 404) return null;
   if (!res.ok) throw new Error("failed to load deck");

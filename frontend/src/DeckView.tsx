@@ -37,12 +37,14 @@ import DeckHero from "./DeckHero";
 import DeckList from "./DeckList";
 import DeckSidebar from "./DeckSidebar";
 import DeckStats from "./DeckStats";
-import { GROUP_LABELS, SORT_LABELS, VIEW_LABELS, buildRows, deckStats, groupRows } from "./deckListModel";
+import { buildRows, deckStats, groupRows } from "./deckListModel";
 import { analyzeDeck } from "./deckHealth";
+import { loadSettings, saveSettings } from "./listSettings";
 import DeckMenu from "./DeckMenu";
 import ExportDecklistModal from "./ExportDecklistModal";
 import { buildDecklistText } from "./importExport";
 import ImportCardsModal from "./ImportCardsModal";
+import ShareDeckModal from "./ShareDeckModal";
 import {
   clearSelectedPrinting,
   loadSelectedPrintings,
@@ -60,28 +62,6 @@ import "./deckview.css";
 const RETRY_DELAYS_MS = [30_000, 90_000, 180_000];
 
 const TAB_LABELS = { build: "Deck", insights: "Insights", chat: "Correspondence" } as const;
-
-// How the list is shown is a per-viewer preference, kept in the browser.
-const SETTINGS_KEY = "mtg-deck-doctor:deckView";
-const DEFAULT_SETTINGS: ListSettings = { view: "text", groupBy: "type", sortBy: "name", showMana: true, showPrices: false };
-
-function loadSettings(): ListSettings {
-  try {
-    const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null");
-    if (saved && typeof saved === "object") {
-      return {
-        view: saved.view in VIEW_LABELS ? saved.view : DEFAULT_SETTINGS.view,
-        groupBy: saved.groupBy in GROUP_LABELS ? saved.groupBy : DEFAULT_SETTINGS.groupBy,
-        sortBy: saved.sortBy in SORT_LABELS ? saved.sortBy : DEFAULT_SETTINGS.sortBy,
-        showMana: typeof saved.showMana === "boolean" ? saved.showMana : DEFAULT_SETTINGS.showMana,
-        showPrices: typeof saved.showPrices === "boolean" ? saved.showPrices : DEFAULT_SETTINGS.showPrices,
-      };
-    }
-  } catch {
-    // no saved settings, or the browser won't say — the defaults do
-  }
-  return DEFAULT_SETTINGS;
-}
 
 // An EDHREC include at or above this rate counts as a "staple" for the
 // Insights tab's attention badge — played in at least half the decks that
@@ -141,6 +121,7 @@ export default function DeckView() {
   const [nextRetryAt, setNextRetryAt] = useState<number | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [showImport, setShowImport] = useState(false);
+  const [showShare, setShowShare] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const [exportText, setExportText] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -345,11 +326,7 @@ export default function DeckView() {
 
   function handleSettings(next: ListSettings) {
     setSettings(next);
-    try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
-    } catch {
-      // per-viewer convenience only — fine if it's unavailable
-    }
+    saveSettings(next);
   }
 
   function handleHover(name: string, id?: string | null) {
@@ -617,6 +594,9 @@ export default function DeckView() {
             <button className="dv-action" onClick={handleExport}>
               Export
             </button>
+            <button className="dv-action" onClick={() => setShowShare(true)}>
+              {deck.share_token ? "Shared" : "Share"}
+            </button>
             <DeckMenu
               onAddToCollection={handleAddDeckToCollection}
               onRefreshCardData={handleRefreshCardData}
@@ -764,6 +744,8 @@ export default function DeckView() {
           onClose={() => setModalCard(null)}
         />
       )}
+
+      {deck && showShare && <ShareDeckModal deck={deck} onChange={setDeck} onClose={() => setShowShare(false)} />}
 
       {deck && showImport && (
         <ImportCardsModal

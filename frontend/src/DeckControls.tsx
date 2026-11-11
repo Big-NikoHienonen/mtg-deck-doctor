@@ -20,7 +20,7 @@ function Select<T extends string>({ label, value, labels, onChange }: { label: s
 }
 
 // Above the list: a way to add a card, and how the list is shown — view, group, sort, and a few extras.
-export default function DeckControls({ settings, onChange, add }: { settings: ListSettings; onChange: (next: ListSettings) => void; add: ReactNode }) {
+export default function DeckControls({ settings, onChange, add }: { settings: ListSettings; onChange: (next: ListSettings) => void; add?: ReactNode }) {
   const [advanced, setAdvanced] = useState(false);
   const set = <K extends keyof ListSettings>(key: K, value: ListSettings[K]) => onChange({ ...settings, [key]: value });
   return (

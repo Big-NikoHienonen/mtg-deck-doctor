@@ -49,7 +49,7 @@
   white-space: nowrap;
 }
 
-.app-bar-logo:hover .app-bar-name {
+a.app-bar-logo:hover .app-bar-name {
   color: var(--accent);
 }
 

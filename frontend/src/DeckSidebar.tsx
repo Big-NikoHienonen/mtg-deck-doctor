@@ -20,7 +20,8 @@ export default function DeckSidebar({
   priceUsd: string | null | undefined;
   inDeck: boolean;
   owned: boolean;
-  onToggleOwned: () => void;
+  // Left off where the collection isn't the viewer's to change (a shared deck).
+  onToggleOwned?: () => void;
   onOpen: () => void;
 }) {
   const price = priceUsd ? parseFloat(priceUsd).toFixed(2) : null;
@@ -55,7 +56,7 @@ export default function DeckSidebar({
             <span>Buy @ TCGplayer</span>
             {price && <strong>${price}</strong>}
           </a>
-          {inDeck && (
+          {inDeck && onToggleOwned && (
             <button className="dv-buy" onClick={onToggleOwned}>
               <span>{owned ? "✓ In your collection" : "Mark as owned"}</span>
             </button>

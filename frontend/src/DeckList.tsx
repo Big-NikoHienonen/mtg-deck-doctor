@@ -15,8 +15,9 @@ type Props = {
   owned: Set<string>;
   onHover: (name: string) => void;
   onOpen: (name: string) => void;
-  onAddOne: (name: string) => Promise<void>;
-  onRemoveOne: (name: string) => Promise<void>;
+  // Both left off for a list that can't be changed (a shared deck): no per-card menu then.
+  onAddOne?: (name: string) => Promise<void>;
+  onRemoveOne?: (name: string) => Promise<void>;
 };
 
 type Folding = { collapsed: Set<string>; toggle: (key: string) => void };
@@ -68,7 +69,7 @@ function TextList({ groups, view, options, owned, printings, onHover, onOpen, on
       )}
       {options.showMana && <ManaCost cost={r.info?.manaCost} />}
       {options.showPrices && <span className="dv-price">{r.price !== null ? `$${(r.price * r.count).toFixed(2)}` : ""}</span>}
-      {r.isCommander ? (
+      {r.isCommander || !onAddOne || !onRemoveOne ? (
         <span className="dv-act-space" aria-hidden />
       ) : (
         <button
@@ -86,10 +87,12 @@ function TextList({ groups, view, options, owned, printings, onHover, onOpen, on
       {menuFor === r.name && (
         <div className="dv-menu" onClick={(e) => e.stopPropagation()}>
           <button onClick={choose(r.name, onOpen)}>Details</button>
-          <button onClick={choose(r.name, onAddOne)}>Add one</button>
-          <button className="dv-danger" onClick={choose(r.name, onRemoveOne)}>
-            Remove one
-          </button>
+          {onAddOne && <button onClick={choose(r.name, onAddOne)}>Add one</button>}
+          {onRemoveOne && (
+            <button className="dv-danger" onClick={choose(r.name, onRemoveOne)}>
+              Remove one
+            </button>
+          )}
         </div>
       )}
     </li>
