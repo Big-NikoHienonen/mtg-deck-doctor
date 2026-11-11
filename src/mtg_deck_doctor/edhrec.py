@@ -44,11 +44,6 @@ def _slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", slug).strip("-")
 
 
-def commander_slug(name: str) -> str:
-    """The name EDHREC uses for this commander in its page addresses."""
-    return _slug(name)
-
-
 def _load_cache() -> dict:
     if not CACHE_PATH.exists():
         return {}

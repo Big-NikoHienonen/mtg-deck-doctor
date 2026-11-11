@@ -4,13 +4,9 @@ logic (including validation) lives there, shared between the AI's tool
 calls and these direct manual-edit endpoints.
 """
 
-import hashlib
-import json
 import logging
-import re
 import threading
 import time
-from typing import Literal
 from datetime import datetime, timezone
 
 import anthropic
@@ -43,7 +39,7 @@ from mtg_deck_doctor.deck import (
     save_messages,
     unkeep_card,
 )
-from mtg_deck_doctor import ai_errors, deck_builder, usage, wizard
+from mtg_deck_doctor import ai_errors, game_changers, usage
 from mtg_deck_doctor.edhrec import get_commander_includes, peek_commander_includes
 from mtg_deck_doctor.usage import AiBudgetExceeded
 from mtg_deck_doctor.new_cards import (
@@ -66,7 +62,6 @@ from mtg_deck_doctor.tool_loop import (
     run_conversation,
     set_commander,
     discover_new_cards,
-    explain_commanders,
     pick_commanders,
     review_cuts,
     create_message,
@@ -596,265 +591,6 @@ def refresh_new_commanders_endpoint(force: bool = False) -> dict:
         return {"commanders": _present_new_commanders(stored, codes, decks)}
 
 
-# -- the new-deck helper ------------------------------------------------------
-
-
-def _wizard_colors(colors: str) -> str:
-    try:
-        return wizard.canonical_colors(colors)
-    except ValueError as err:
-        raise HTTPException(status_code=400, detail=str(err))
-
-
-@app.get("/wizard/themes")
-def wizard_themes_endpoint(colors: str, themes: str) -> dict:
-    """How many commanders each of the comma-separated themes has in these colours."""
-    slugs = [t for t in themes.split(",") if re.fullmatch(r"[a-z0-9-]{1,40}", t)][:60]
-    return {"counts": wizard.theme_counts(_wizard_colors(colors), slugs)}
-
-
-@app.get("/wizard/commanders")
-def wizard_commanders_endpoint(colors: str, theme: str | None = None, bracket: int | None = None, niche: bool = False) -> dict:
-    if theme is not None and not re.fullmatch(r"[a-z0-9-]{1,40}", theme):
-        raise HTTPException(status_code=400, detail="unknown theme")
-    if bracket is not None and bracket not in wizard.BRACKET_PAGES:
-        raise HTTPException(status_code=400, detail="bracket must be 1-4")
-    return wizard.candidates(_wizard_colors(colors), theme, bracket, niche)
-
-
-def _starter_list(
-    commander: str,
-    bracket: int,
-    budget: float | None,
-    caps: dict[str, float] | None = None,
-    invest: list[str] | None = None,
-    include: list[str] | None = None,
-    avoid: list[str] | None = None,
-) -> dict:
-    if budget is not None and not 10 <= budget <= 10000:
-        raise HTTPException(status_code=400, detail="budget must be between $10 and $10,000")
-    if any(cap > 10000 for cap in (caps or {}).values()):
-        raise HTTPException(status_code=400, detail="a spending limit can't be more than $10,000")
-    try:
-        return wizard.starter_list(commander, bracket, budget, caps, invest, include, avoid)
-    except ValueError as err:
-        raise HTTPException(status_code=400, detail=str(err))
-    except wizard.WizardDataError as err:
-        raise HTTPException(status_code=502, detail=str(err))
-
-
-def _parse_caps(caps: str | None) -> dict[str, float]:
-    """"lands:35,rocks:20" -> {"lands": 35.0, "rocks": 20.0}."""
-    parsed: dict[str, float] = {}
-    for part in filter(None, (caps or "").split(",")):
-        area, _, amount = part.partition(":")
-        try:
-            parsed[area.strip()] = float(amount)
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"{part!r} isn't a spending limit like lands:35")
-    return parsed
-
-
-@app.get("/wizard/preview")
-def wizard_preview_endpoint(
-    commander: str, bracket: int, budget: float | None = None, caps: str | None = None, invest: str | None = None
-) -> dict:
-    return _starter_list(commander, bracket, budget, _parse_caps(caps), [a for a in (invest or "").split(",") if a])
-
-
-class BuildBrief(BaseModel):
-    """What the player gave the new-deck page (every part optional) and said in their
-    own words, for the Doctor to build a deck from."""
-
-    text: str = Field(default="", max_length=1000)
-    # The styles the form offers, as the names the backend recognises.
-    styles: list[str]
-    colors: list[str] = []
-    colorless: bool = False
-    theme: str | None = None
-    bracket: int | None = None
-    # A dollar cap, "none" for no limit, or null for no preference.
-    budget: float | Literal["none"] | None = None
-    caps: dict[str, float] = {}
-    invest: list[str] = []
-    lesser_known: bool = False
-    commander: str | None = None
-
-
-@app.exception_handler(deck_builder.BuildError)
-def build_error_handler(request: Request, exc: deck_builder.BuildError) -> JSONResponse:
-    return JSONResponse(status_code=exc.status, content={"detail": exc.detail, "code": "build_error"})
-
-
-@app.post("/builds")
-def start_build_endpoint(brief: BuildBrief) -> dict:
-    """Starts building a deck with the Doctor, phase by phase, from the brief. The
-    page follows it with GET /builds/{id}; nothing becomes a deck until /create."""
-    if brief.theme is not None and not re.fullmatch(r"[a-z0-9-]{1,40}", brief.theme):
-        raise HTTPException(status_code=400, detail="unknown theme")
-    if brief.bracket is not None and brief.bracket not in wizard.BRACKET_PAGES:
-        raise HTTPException(status_code=400, detail="bracket must be 1-4")
-    if isinstance(brief.budget, float) and not 10 <= brief.budget <= 10000:
-        raise HTTPException(status_code=400, detail="budget must be between $10 and $10,000")
-    if any(len(c) != 1 or c not in "WUBRG" for c in brief.colors):
-        raise HTTPException(status_code=400, detail="unknown color")
-    if any(cap > 10000 for cap in brief.caps.values()):
-        raise HTTPException(status_code=400, detail="a spending limit can't be more than $10,000")
-    try:
-        wizard._check_spend(brief.caps, brief.invest)
-    except ValueError as err:
-        raise HTTPException(status_code=400, detail=str(err))
-    payload = {**brief.model_dump(), "styles": [s for s in brief.styles if re.fullmatch(r"[a-z0-9-]{1,40}", s)][:80]}
-    return {"id": deck_builder.create(payload)}
-
-
-@app.get("/builds/{build_id}")
-def get_build_endpoint(build_id: str) -> dict:
-    return deck_builder.public(deck_builder.get(build_id))
-
-
-class BuildCommanderRequest(BaseModel):
-    name: str
-
-
-class Rejection(BaseModel):
-    name: str
-    reason: str = Field(default="", max_length=200)
-
-
-class BuildRefineRequest(BaseModel):
-    """The player's answer to the commanders offered: more about what they want, commanders
-    that aren't it (with why), ones that are close, facts to take back."""
-
-    text: str = Field(default="", max_length=600)
-    reject: list[Rejection] = []
-    like: list[str] = []
-    drop: list[str] = []
-
-
-@app.post("/builds/{build_id}/commander/refine")
-def build_refine_endpoint(build_id: str, request: BuildRefineRequest) -> dict:
-    deck_builder.refine_commanders(build_id, request.text, [r.model_dump() for r in request.reject], request.like, request.drop)
-    return deck_builder.public(deck_builder.get(build_id))
-
-
-@app.post("/builds/{build_id}/commander")
-def build_commander_endpoint(build_id: str, request: BuildCommanderRequest) -> dict:
-    deck_builder.choose_commander(build_id, request.name)
-    return deck_builder.public(deck_builder.get(build_id))
-
-
-@app.post("/builds/{build_id}/begin")
-def build_begin_endpoint(build_id: str) -> dict:
-    deck_builder.begin(build_id)
-    return deck_builder.public(deck_builder.get(build_id))
-
-
-class BuildLockRequest(BaseModel):
-    keep: list[str]
-
-
-@app.post("/builds/{build_id}/phases/{phase_id}/lock")
-def build_lock_endpoint(build_id: str, phase_id: str, request: BuildLockRequest) -> dict:
-    deck_builder.lock_phase(build_id, phase_id, request.keep)
-    return deck_builder.public(deck_builder.get(build_id))
-
-
-class BuildRedoRequest(BaseModel):
-    remove: list[str] = []
-    note: str = Field(default="", max_length=400)
-
-
-@app.post("/builds/{build_id}/phases/{phase_id}/redo")
-def build_redo_endpoint(build_id: str, phase_id: str, request: BuildRedoRequest) -> dict:
-    deck_builder.redo_phase(build_id, phase_id, request.remove, request.note)
-    return deck_builder.public(deck_builder.get(build_id))
-
-
-@app.post("/builds/{build_id}/retry")
-def build_retry_endpoint(build_id: str) -> dict:
-    deck_builder.retry(build_id)
-    return deck_builder.public(deck_builder.get(build_id))
-
-
-@app.post("/builds/{build_id}/create")
-def build_create_deck_endpoint(build_id: str) -> dict:
-    """Makes the deck from a finished build, with the Doctor's account of how it was
-    built as the first messages of its Correspondence tab. Once only: asking again
-    returns the deck already made."""
-    with deck_builder.session_lock(build_id):
-        s = deck_builder.get(build_id)
-        if s["deck_id"]:
-            return {"deck": load_deck(s["deck_id"]), "added": 0, "failed": []}
-        if s["stage"] != "review":
-            raise HTTPException(status_code=409, detail="Finish the phases first.")
-        deck = create_deck()
-        started = set_commander(deck, s["commander"]["name"])
-        if "error" in started:
-            delete_deck(deck.id)
-            raise HTTPException(status_code=400, detail=started["error"])
-        outcome = add_cards(deck, deck_builder.final_cards(s))
-        save_messages(deck, deck_builder.conversation(s))
-        deck_builder.mark_done(build_id, deck.id)
-        return {"deck": deck, "added": len(outcome["added"]), "failed": outcome["failed"]}
-
-
-class WizardExplainRequest(BaseModel):
-    colors: str
-    theme: str | None = None
-    bracket: int | None = None
-    budget: float | None = None
-    niche: bool = False
-
-
-@app.post("/wizard/explain")
-def wizard_explain_endpoint(request: WizardExplainRequest) -> dict:
-    """One sentence per commander on why it suits the answers — for the
-    commanders the answers give, worked out here, never taken from the client.
-    Kept for a day per answer set, so asking again costs nothing."""
-    colors = _wizard_colors(request.colors)
-    if request.theme is not None and not re.fullmatch(r"[a-z0-9-]{1,40}", request.theme):
-        raise HTTPException(status_code=400, detail="unknown theme")
-    if request.bracket is not None and request.bracket not in wizard.BRACKET_PAGES:
-        raise HTTPException(status_code=400, detail="bracket must be 1-4")
-    result = wizard.candidates(colors, request.theme, request.bracket, request.niche)
-    if result["unavailable"] or not result["commanders"]:
-        raise HTTPException(status_code=502, detail="There are no commanders to explain right now.")
-    names = [c["name"] for c in result["commanders"]]
-    key = "explain:" + hashlib.sha1(json.dumps([colors, request.theme, request.bracket, request.budget, request.niche, names]).encode()).hexdigest()
-    reasons = wizard.cached_get(key)
-    if reasons is None:
-        answers = wizard.answers_in_words(colors, request.theme, request.bracket, request.budget, request.niche)
-        reasons = _generate(lambda: explain_commanders(answers, wizard.explain_context(result)))
-        if reasons:
-            wizard.cached_put(key, reasons)
-    return {"reasons": reasons}
-
-
-class WizardBuildRequest(BaseModel):
-    commander: str
-    bracket: int
-    budget: float | None = None
-    caps: dict[str, float] = {}
-    invest: list[str] = []
-
-
-@app.post("/wizard/build")
-def wizard_build_endpoint(request: WizardBuildRequest) -> dict:
-    """Creates the deck: the commander, then the starting list the preview
-    showed — rebuilt here from the answers, never taken from the client, and
-    every card validated like any other add."""
-    commander = request.commander
-    plan = _starter_list(commander, request.bracket, request.budget, request.caps, request.invest)
-    deck = create_deck()
-    started = set_commander(deck, commander)
-    if "error" in started:
-        delete_deck(deck.id)
-        raise HTTPException(status_code=400, detail=started["error"])
-    outcome = add_cards(deck, [c["name"] for c in plan["cards"] for _ in range(c["quantity"])])
-    return {"deck": deck, "added": len(outcome["added"]), "failed": outcome["failed"], "notes": plan["notes"]}
-
-
 # Orders shown on the landing page. A handful, on purpose: a short list the
 # Doctor stands behind, not an inbox.
 MAX_ORDERS = 3
@@ -942,7 +678,7 @@ def get_commander_includes_endpoint(name: str) -> dict:
     includes = get_commander_includes(name)
     # EDHREC's own Game Changer flag never appears on its commander pages, so
     # mark them from Scryfall's list (left as EDHREC had it if that can't be read).
-    flagged = wizard.game_changer_names()
+    flagged = game_changers.game_changer_names()
     if includes.get("available") and flagged is not None:
         for card in includes["cards"]:
             card["game_changer"] = card["name"] in flagged

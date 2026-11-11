@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { aiBlocked } from "./aiStatus";
 import { useNavigate } from "react-router-dom";
-import { refreshNewCommanders, type CommanderPick, type Hub, type NewCommanders as Picks } from "./api";
+import { createDeck, refreshNewCommanders, type CommanderPick, type Hub, type NewCommanders as Picks } from "./api";
 import CardImage from "./CardImage";
 import ManaPips from "./ManaPips";
 import { releaseNames } from "./releases";
@@ -13,7 +13,7 @@ let started = false;
 
 const pulse = { animation: "pulse 1.6s ease-in-out infinite" };
 
-function Pick({ pick, onStart }: { pick: CommanderPick; onStart: () => void }) {
+function Pick({ pick, onStart, starting }: { pick: CommanderPick; onStart: () => void; starting: boolean }) {
   return (
     <div
       style={{
@@ -59,8 +59,8 @@ function Pick({ pick, onStart }: { pick: CommanderPick; onStart: () => void }) {
         )}
 
         <div style={{ marginTop: "auto", paddingTop: 4 }}>
-          <button onClick={onStart} className="btn btn-positive" style={{ ...buttonStyle, fontWeight: 600 }}>
-            {`Start a deck with ${pick.name.split(",")[0]}`}
+          <button onClick={onStart} disabled={starting} className="btn btn-positive" style={{ ...buttonStyle, fontWeight: 600 }}>
+            {starting ? "Starting…" : `Start a deck with ${pick.name.split(",")[0]}`}
           </button>
         </div>
       </div>
@@ -70,12 +70,15 @@ function Pick({ pick, onStart }: { pick: CommanderPick; onStart: () => void }) {
 
 // New commanders from the latest sets that the Doctor thinks you'd enjoy
 // building around — chosen with your own decks in mind, each with what it asks
-// you to build and a button that starts that deck in the new-deck helper. Looked for once per set
+// you to build and a button that starts a deck led by it. Looked for once per set
 // release (or when your decks change), by itself, and kept.
 export default function NewCommanders({ hub, onPicks }: { hub: Hub; onPicks: (picks: Picks) => void }) {
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The commander whose deck is being made.
+  const [starting, setStarting] = useState<string | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
 
   function look() {
     started = true;
@@ -92,10 +95,18 @@ export default function NewCommanders({ hub, onPicks }: { hub: Hub; onPicks: (pi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hub.latest_sets, hub.commanders]);
 
-  // Into the new-deck helper with this commander chosen: it still asks for a
-  // power level and a budget, then builds the starting list.
-  function start(pick: CommanderPick) {
-    navigate(`/new?commander=${encodeURIComponent(pick.name)}`);
+  // Makes a deck with this commander and opens it.
+  async function start(pick: CommanderPick) {
+    if (starting) return;
+    setStarting(pick.name);
+    setStartError(null);
+    try {
+      const deck = await createDeck({ commander: pick.name });
+      navigate(`/decks/${deck.id}`);
+    } catch (err) {
+      setStartError(err instanceof Error ? err.message : "Couldn't start the deck.");
+      setStarting(null);
+    }
   }
 
   const picks = hub.commanders?.picks ?? [];
@@ -123,10 +134,12 @@ export default function NewCommanders({ hub, onPicks }: { hub: Hub; onPicks: (pi
       {!busy && picks.length > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(560px, 100%), 1fr))", gap: 20, alignItems: "stretch" }}>
           {picks.map((pick) => (
-            <Pick key={pick.name} pick={pick} onStart={() => start(pick)} />
+            <Pick key={pick.name} pick={pick} starting={starting === pick.name} onStart={() => start(pick)} />
           ))}
         </div>
       )}
+
+      {startError && <div style={{ fontSize: 14, color: "var(--danger)", marginTop: 12 }}>{startError}</div>}
 
       {!busy && error && (
         <div style={{ fontSize: 14, color: "var(--danger)" }}>

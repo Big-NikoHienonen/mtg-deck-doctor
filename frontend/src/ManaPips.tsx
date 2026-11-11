@@ -4,9 +4,9 @@ export default function ManaPips({ colors, size = 16 }: { colors: string[]; size
   if (colors.length === 0) return null;
   return (
     <span style={{ display: "inline-flex", gap: 3, verticalAlign: "middle" }}>
-      {colors.map((c) => (
+      {colors.map((c, i) => (
         <img
-          key={c}
+          key={`${c}-${i}`}
           src={scryfallManaSymbolUrl(c)}
           alt={c}
           title={c}
