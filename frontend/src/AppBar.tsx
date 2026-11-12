@@ -6,9 +6,9 @@ import NewDeckModal from "./NewDeckModal";
 import ThemePicker from "./ThemePicker";
 import "./appbar.css";
 
-// The bar along the top of every page: the logo, which goes home, the places to go from anywhere (My
-// decks is home too, named for what is there), New deck, and the theme. New deck is a window over
-// whatever page you are on, so it lives here. Sign out shows when the backend asks for a password.
+// The bar along the top of every page: the logo, which goes to the landing page, the places to go from
+// anywhere (My decks, My collection, Search cards, Admin), New deck, and the theme. New deck is a
+// window over whatever page you are on, so it lives here. Sign out shows when the backend asks for a password.
 // Someone who isn't signed in, looking at a deck or at the sign-in page, gets the name and the theme and
 // nothing to go to. So does the moment before it is known whether this browser is signed in.
 export default function AppBar() {
@@ -20,7 +20,7 @@ export default function AppBar() {
   // My collection and Search cards are both the card search page, told apart by what it was asked.
   const inCollection = pathname === "/search/results" && new URLSearchParams(search).get("collection") === "1";
   const links = [
-    { to: "/", label: "My decks", current: pathname === "/" || pathname.startsWith("/decks/") },
+    { to: "/decks", label: "My decks", current: pathname === "/decks" || pathname.startsWith("/decks/") },
     { to: "/search/results?collection=1", label: "My collection", current: inCollection },
     { to: "/search", label: "Search cards", current: pathname.startsWith("/search") && !inCollection },
     { to: "/admin", label: "Admin", current: pathname === "/admin" },

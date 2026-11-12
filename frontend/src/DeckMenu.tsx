@@ -4,7 +4,7 @@ import { buttonStyle } from "./styles";
 const menuItemStyle = { ...buttonStyle, textAlign: "left" as const, width: "100%" };
 
 // A "⋮" dropdown for deck-level actions that don't need to live in the main
-// header — same in-page-confirm pattern HubView's own delete button uses
+// header — same in-page-confirm pattern DeckTile's own delete button uses
 // (no window.confirm(), which is unreliable to test and poor UX), just
 // nested inside a menu instead of swapped into a list row.
 export default function DeckMenu({

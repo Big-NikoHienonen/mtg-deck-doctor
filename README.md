@@ -6,7 +6,7 @@ The backend is FastAPI (Python, managed with uv). The front end is React and Typ
 
 ## What it does
 
-**New deck** is a button on the home page. It opens a window where you give the deck a name and search for a commander. Both are optional. **Create deck** takes you to the deck page. The "Start a deck with…" button on a new-commander suggestion does the same with that commander already set.
+**New deck** is a button in the app bar. It opens a window where you give the deck a name and search for a commander. Both are optional. **Create deck** takes you to the deck page. The "Start a deck with…" button on a new-commander suggestion does the same with that commander already set.
 
 **Deck view** (`/decks/:id`) works on any deck, built here or imported:
 
@@ -16,7 +16,7 @@ The backend is FastAPI (Python, managed with uv). The front end is React and Typ
 - Import and export decklists, pick printings, and track which cards you own.
 - Public view: anyone can open a deck's address to look at the list, with no chat, insights, or editing. Sign in at the same address to edit. See [Sign in and public decks](#sign-in-and-public-decks).
 
-**Home** (`/`) lists your decks, and shows new cards and new commanders from recent sets that are worth a look. **Card search** (`/search`) searches Scryfall.
+**Home** (`/`) is the landing page: new cards and new commanders from recent sets that are worth a look, with a link to every new card. **My decks** (`/decks`) lists your decks, and holds the swaps the Doctor has worked out. **Card search** (`/search`) searches Scryfall.
 
 ## Requirements
 
@@ -87,7 +87,7 @@ A deck's address, `<address>/decks/<id>`, then opens a read-only view of the lis
 
 The Doctor's model calls are the app's only real running cost, so they are metered:
 
-- **Admin page.** Open **Admin** on the home page (`/admin`) to see what the Doctor has used: cost and tokens today and over the last 7, 14 or 30 days, a chart per day, a split by feature, and the latest calls. It refreshes every 15 seconds. The numbers come from `GET /usage`.
+- **Admin page.** Open **Admin** in the app bar (`/admin`) to see what the Doctor has used: cost and tokens today and over the last 7, 14 or 30 days, a chart per day, a split by feature, and the latest calls. It refreshes every 15 seconds. The numbers come from `GET /usage`.
 - **Usage log.** Every call is recorded in `data/usage.jsonl` with its feature, model, token counts, and an estimated cost. The estimate comes from token counts and published rates, so it tracks the invoice but is not the invoice.
 - **Daily budget (optional).** Nothing is held back by default. Set `AI_DAILY_BUDGET_USD` and, once a day's estimated cost reaches it, the next call is refused with a 429 (`ai_budget`) until midnight UTC. It is meant for when other people use the app. For a hard stop on your account, set a spend limit in the Anthropic console.
 

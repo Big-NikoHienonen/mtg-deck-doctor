@@ -5,7 +5,8 @@ import AppBar from "./AppBar";
 import AuthGate from "./AuthGate";
 import { refreshAuth } from "./authStore";
 import DeckRoute from "./DeckRoute";
-import HubView from "./HubView";
+import DecksPage from "./DecksPage";
+import LandingView from "./LandingView";
 import CardSearchPage from "./CardSearchPage";
 import CardSearchResultsPage from "./CardSearchResultsPage";
 
@@ -22,7 +23,8 @@ export default function App() {
         <Routes>
           <Route path="/decks/:deckId" element={<DeckRoute />} />
           <Route element={<AuthGate />}>
-            <Route path="/" element={<HubView />} />
+            <Route path="/" element={<LandingView />} />
+            <Route path="/decks" element={<DecksPage />} />
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/search" element={<CardSearchPage />} />
             <Route path="/search/results" element={<CardSearchResultsPage />} />

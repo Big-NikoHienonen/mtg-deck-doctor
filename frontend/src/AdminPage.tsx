@@ -91,7 +91,7 @@ export default function AdminPage() {
     <div className="ad">
       <header className="ad-head">
         <div>
-          <Link to="/" className="ad-back">
+          <Link to="/decks" className="ad-back">
             ← ALL DECKS
           </Link>
           <h1>AI usage</h1>

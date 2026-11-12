@@ -119,7 +119,7 @@ export default function CardSearchPage() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       <header>
-        <Link to="/" style={{ ...eyebrowStyle, textDecoration: "none", display: "inline-block" }}>
+        <Link to="/decks" style={{ ...eyebrowStyle, textDecoration: "none", display: "inline-block" }}>
           &larr; ALL DECKS
         </Link>
         <div style={{ fontSize: 26, fontWeight: 600, marginTop: 4 }}>Search cards</div>

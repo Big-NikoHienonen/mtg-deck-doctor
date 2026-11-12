@@ -44,7 +44,7 @@ export default function DeckHero({
       {art && <div className="dv-hero-art" style={{ backgroundImage: `url(${art})` }} />}
       <div className="dv-container dv-hero-body">
         {showBack ? (
-          <Link to="/" className="dv-back">
+          <Link to="/decks" className="dv-back">
             ← ALL DECKS
           </Link>
         ) : null}

@@ -319,7 +319,7 @@ export default function DeckView() {
   async function handleDeleteDeck() {
     if (!deck) return;
     await deleteDeck(deck.id);
-    navigate("/");
+    navigate("/decks");
   }
 
   function handleSettings(next: ListSettings) {
@@ -447,7 +447,7 @@ export default function DeckView() {
     return (
       <div>
         <p>No deck found with that id.</p>
-        <button className="btn" style={buttonStyle} onClick={() => navigate("/")}>
+        <button className="btn" style={buttonStyle} onClick={() => navigate("/decks")}>
           Back to all decks
         </button>
       </div>
