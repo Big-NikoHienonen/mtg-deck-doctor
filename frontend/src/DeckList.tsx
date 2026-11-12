@@ -15,7 +15,7 @@ type Props = {
   owned: Set<string>;
   onHover: (name: string) => void;
   onOpen: (name: string) => void;
-  // Both left off for a list that can't be changed (a shared deck): no per-card menu then.
+  // Both left off for a list that can't be changed (a deck seen signed out): no per-card menu then.
   onAddOne?: (name: string) => Promise<void>;
   onRemoveOne?: (name: string) => Promise<void>;
 };

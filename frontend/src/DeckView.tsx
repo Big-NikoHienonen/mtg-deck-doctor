@@ -44,7 +44,6 @@ import DeckMenu from "./DeckMenu";
 import ExportDecklistModal from "./ExportDecklistModal";
 import { buildDecklistText } from "./importExport";
 import ImportCardsModal from "./ImportCardsModal";
-import ShareDeckModal from "./ShareDeckModal";
 import {
   clearSelectedPrinting,
   loadSelectedPrintings,
@@ -121,7 +120,6 @@ export default function DeckView() {
   const [nextRetryAt, setNextRetryAt] = useState<number | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [showImport, setShowImport] = useState(false);
-  const [showShare, setShowShare] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const [exportText, setExportText] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -594,9 +592,6 @@ export default function DeckView() {
             <button className="dv-action" onClick={handleExport}>
               Export
             </button>
-            <button className="dv-action" onClick={() => setShowShare(true)}>
-              {deck.share_token ? "Shared" : "Share"}
-            </button>
             <DeckMenu
               onAddToCollection={handleAddDeckToCollection}
               onRefreshCardData={handleRefreshCardData}
@@ -745,7 +740,6 @@ export default function DeckView() {
         />
       )}
 
-      {deck && showShare && <ShareDeckModal deck={deck} onChange={setDeck} onClose={() => setShowShare(false)} />}
 
       {deck && showImport && (
         <ImportCardsModal

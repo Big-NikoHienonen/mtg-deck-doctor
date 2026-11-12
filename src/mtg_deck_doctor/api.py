@@ -10,8 +10,7 @@ import time
 from datetime import datetime, timezone
 
 import anthropic
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -25,12 +24,12 @@ from mtg_deck_doctor.collection import (
 )
 from mtg_deck_doctor.deck import (
     Deck,
+    DECK_ID_PATTERN,
     DeckConflictError,
     create_deck,
     deck_fingerprint,
     delete_deck,
     duplicate_deck,
-    find_shared_deck,
     keep_card,
     list_decks,
     load_ai_result,
@@ -38,11 +37,10 @@ from mtg_deck_doctor.deck import (
     rename_deck,
     save_ai_result,
     save_messages,
-    share_deck,
     unkeep_card,
-    unshare_deck,
 )
-from mtg_deck_doctor import ai_errors, game_changers, usage
+from mtg_deck_doctor import ai_errors, auth, game_changers, usage
+from mtg_deck_doctor.auth import public
 from mtg_deck_doctor.edhrec import get_commander_includes, peek_commander_includes
 from mtg_deck_doctor.usage import AiBudgetExceeded
 from mtg_deck_doctor.new_cards import (
@@ -74,17 +72,26 @@ from mtg_deck_doctor.tool_loop import (
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="MTG Deck Doctor")
 
-# Vite's and Create React App's default dev-server ports, so the frontend
-# can call this from localhost without a CORS error.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+def require_owner(request: Request) -> None:
+    """Runs before every route. A route marked `@public` is open to anyone; every other route needs the
+    owner's session cookie (see auth.py), so a route added later is closed until someone opens it."""
+    route = request.scope.get("route")
+    if route is not None and getattr(route.endpoint, "public", False):
+        return
+    state = auth.mode()
+    if state == "off":
+        return
+    if state == "unconfigured":
+        raise HTTPException(
+            status_code=503,
+            detail=f"No owner password is set. Set {auth.PASSWORD_ENV} in the backend's environment and restart it.",
+        )
+    if not auth.valid_session(request.cookies.get(auth.COOKIE)):
+        raise HTTPException(status_code=401, detail="Sign in to use the app.")
 
+
+app = FastAPI(title="MTG Deck Doctor", dependencies=[Depends(require_owner)])
 
 # Every deck edit retries on its own when it loses a race (see
 # deck.retry_on_conflict), so this only reaches the client when a deck was
@@ -96,8 +103,8 @@ def deck_conflict_handler(request: Request, exc: DeckConflictError) -> JSONRespo
 
 # A failed model call — no credits, a rejected key, rate limiting, an outage —
 # reaches the client as a typed error it can explain and act on, from any
-# endpoint that calls the model. Left unhandled it would be a bare 500, which
-# the browser reports as a network error (the response skips the CORS headers).
+# endpoint that calls the model. Left unhandled it would be a bare 500 with no
+# explanation the page could show.
 @app.exception_handler(AiBudgetExceeded)
 def ai_budget_handler(request: Request, exc: AiBudgetExceeded) -> JSONResponse:
     logger.warning("daily AI budget reached on %s %s: $%.2f of $%.2f", request.method, request.url.path, exc.spent, exc.limit)
@@ -278,23 +285,10 @@ def duplicate_deck_endpoint(deck_id: str) -> Deck:
     return copy
 
 
-@app.post("/decks/{deck_id}/share")
-def share_deck_endpoint(deck_id: str) -> Deck:
-    """Turns on the deck's share link (the same one if it is already on). The deck comes back with
-    its `share_token`."""
-    return share_deck(_get_deck_or_404(deck_id))
-
-
-@app.delete("/decks/{deck_id}/share")
-def unshare_deck_endpoint(deck_id: str) -> Deck:
-    """Turns the link off for good: it opens nothing from then on, even if the deck is shared again."""
-    return unshare_deck(_get_deck_or_404(deck_id))
-
-
-class SharedDeck(BaseModel):
-    """What a share link shows: the list, and nothing that could be used to change the deck or to
-    use the Doctor on it. Not the deck's id, its conversation, or its keep list. A model, not the
-    deck, so a field added to the deck later isn't shared by accident."""
+class PublicDeck(BaseModel):
+    """What anyone can see of a deck without signing in: the list, and nothing that could be used to
+    change the deck or to use the Doctor on it. Not its conversation or its keep list. A model, not the
+    deck, so a field added to the deck later isn't public by accident."""
 
     name: str | None
     commander: str | None
@@ -303,18 +297,81 @@ class SharedDeck(BaseModel):
     updated_at: str
 
 
-@app.get("/shared/{token}")
-def get_shared_deck_endpoint(token: str) -> SharedDeck:
-    deck = find_shared_deck(token)
-    if deck is None:
-        raise HTTPException(status_code=404, detail="This deck isn't shared, or its link was turned off.")
-    return SharedDeck(
+def _public_deck_or_404(deck_id: str) -> Deck:
+    deck = DECK_ID_PATTERN.fullmatch(deck_id) and load_deck(deck_id)
+    if not deck:
+        raise HTTPException(status_code=404, detail="There's no deck at this address.")
+    return deck
+
+
+# A deck's page is open to look at: its address is the link. These routes answer for anyone, and only
+# ever with the list and with data on the cards in it. Everything else about a deck needs the sign-in.
+@app.get("/public/decks/{deck_id}")
+@public
+def get_public_deck_endpoint(deck_id: str) -> PublicDeck:
+    deck = _public_deck_or_404(deck_id)
+    return PublicDeck(
         name=deck.name,
         commander=deck.commander,
         commander_color_identity=deck.commander_color_identity,
         cards=deck.cards,
         updated_at=deck.updated_at,
     )
+
+
+class LoginRequest(BaseModel):
+    password: str = Field(max_length=200)
+
+
+def _client(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+@app.get("/auth/status")
+@public
+def auth_status_endpoint(request: Request) -> dict:
+    """What the page needs to know before it shows anything: whether the app asks for a password, and
+    whether this browser has entered it."""
+    state = auth.mode()
+    return {
+        "required": state != "off",
+        "configured": state != "unconfigured",
+        "signed_in": state == "off" or auth.valid_session(request.cookies.get(auth.COOKIE)),
+    }
+
+
+@app.post("/auth/login")
+@public
+def login_endpoint(body: LoginRequest, request: Request, response: Response) -> dict:
+    state = auth.mode()
+    if state == "unconfigured":
+        raise HTTPException(status_code=503, detail=f"No owner password is set. Set {auth.PASSWORD_ENV} in the backend's environment and restart it.")
+    if state == "off":
+        return {"ok": True}
+    client = _client(request)
+    wait = auth.throttle.retry_after(client)
+    if wait:
+        raise HTTPException(status_code=429, detail="Too many wrong passwords. Try again later.", headers={"Retry-After": str(wait)})
+    if not auth.password_ok(body.password):
+        auth.throttle.record_failure(client)
+        raise HTTPException(status_code=401, detail="That isn't the password.")
+    auth.throttle.reset(client)
+    response.set_cookie(
+        auth.COOKIE,
+        auth.make_session(),
+        max_age=auth.SESSION_SECONDS,
+        httponly=True,
+        samesite="lax",
+        secure=request.url.scheme == "https",
+    )
+    return {"ok": True}
+
+
+@app.post("/auth/logout")
+@public
+def logout_endpoint(response: Response) -> dict:
+    response.delete_cookie(auth.COOKIE, httponly=True, samesite="lax")
+    return {"ok": True}
 
 
 @app.post("/decks/{deck_id}/name")
@@ -798,3 +855,26 @@ def get_printings_endpoint(name: str) -> dict:
 def get_card_info_batch_endpoint(request: CardInfoBatchRequest) -> CardInfoBatchResponse:
     result = get_card_info_batch(request.names, refresh=request.refresh)
     return CardInfoBatchResponse(**result)
+
+
+# The public deck page needs card details to show the list. These answer only for the cards in that
+# deck, so they can't be used to look up anything else through this server: Scryfall's rate limit is
+# the server's to spend, and a lookup here is a request to Scryfall when the card isn't cached yet.
+@app.post("/public/decks/{deck_id}/cards")
+@public
+def get_public_card_info_endpoint(deck_id: str, request: CardInfoBatchRequest) -> CardInfoBatchResponse:
+    deck = _public_deck_or_404(deck_id)
+    in_deck = set(deck.cards) | ({deck.commander} if deck.commander else set())
+    result = get_card_info_batch([name for name in request.names if name in in_deck])
+    return CardInfoBatchResponse(**result)
+
+
+@app.get("/public/decks/{deck_id}/rulings")
+@public
+def get_public_rulings_endpoint(deck_id: str, id: str) -> dict:
+    deck = _public_deck_or_404(deck_id)
+    names = set(deck.cards) | ({deck.commander} if deck.commander else set())
+    ids = {info["id"] for info in (peek_card_info(name) for name in names) if info and info.get("id")}
+    if id not in ids:
+        raise HTTPException(status_code=404, detail="That card isn't in this deck.")
+    return {"rulings": get_rulings(id)}

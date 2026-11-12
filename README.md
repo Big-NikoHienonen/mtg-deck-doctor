@@ -14,6 +14,7 @@ The backend is FastAPI (Python, managed with uv). The front end is React and Typ
 - Insights: EDHREC's top includes for your commander, a health check, cut suggestions, and swaps.
 - Correspondence: a chat with the Doctor about the deck. The Doctor only suggests. It shows each card it wants to add or cut, or a commander it wants you to use, as a button under its reply, and nothing changes until you click it. The rules check every suggestion first: legality, color identity, the singleton rule, and the 99-card limit.
 - Import and export decklists, pick printings, and track which cards you own.
+- Public view: anyone can open a deck's address to look at the list, with no chat, insights, or editing. Sign in at the same address to edit. See [Sign in and public decks](#sign-in-and-public-decks).
 
 **Home** (`/`) lists your decks, and shows new cards and new commanders from recent sets that are worth a look. **Card search** (`/search`) searches Scryfall.
 
@@ -44,6 +45,7 @@ cp .env.example .env
 | Variable | Description |
 | --- | --- |
 | `ANTHROPIC_API_KEY` | Your Anthropic API key. Required for everything the Doctor does. |
+| `MTG_DECK_DOCTOR_PASSWORD` | The owner's password. Required wherever anyone but you can reach the backend. `./dev-backend.sh` runs without it. See [Sign in and public decks](#sign-in-and-public-decks). |
 | `ANTHROPIC_MODEL` | Optional. The model to use. Defaults to `claude-sonnet-5`. |
 | `AI_DAILY_BUDGET_USD` | Optional, and off unless set. The most the Doctor may spend in a UTC day, as estimated from token counts. See [AI usage and limits](#ai-usage-and-limits). |
 | `ANTHROPIC_CHAT_EFFORT` | Optional. How hard the model thinks in chat: `low`, `medium`, `high` or `max`. Defaults to `medium`. |
@@ -65,7 +67,21 @@ Start the front end on port 5173, in a second terminal:
 cd frontend && npm run dev
 ```
 
-Open http://localhost:5173. The front end calls the backend at `http://localhost:8000`, and the backend allows requests from localhost.
+Open http://localhost:5173. The front end calls the backend at `/api`, and Vite sends that to the backend on port 8000. `./dev-backend.sh` runs the backend without the login, so there is nothing to sign in to.
+
+## Run it for other people
+
+The backend can serve the whole app on one address: the API under `/api`, and the built front end for every other path. One address means the login cookie is first-party, there are no cross-origin requests, and the app works behind any host or tunnel with no extra settings.
+
+Set `MTG_DECK_DOCTOR_PASSWORD` in `.env` or the environment, then run:
+
+```bash
+./serve.sh
+```
+
+It builds the front end and starts the backend on `127.0.0.1:8000`. Set `HOST` and `PORT` to change that. Run the app through HTTPS, so the login cookie is marked secure. Behind a proxy or tunnel that ends HTTPS, `serve.sh` already passes `--proxy-headers`, so the backend sees the visitor's address and the real scheme.
+
+A deck's address, `<address>/decks/<id>`, then opens a read-only view of the list for anyone who can reach it. For a quick test from your own machine, point a tunnel at port 8000. To host it, you need a disk that persists, because decks, your collection, and the caches are files under `data/`, and `data/session_secret` signs the login cookie.
 
 ## AI usage and limits
 
@@ -83,6 +99,19 @@ What keeps each call small:
 - **Effort.** Chat and card suggestions run at `medium` effort (`ANTHROPIC_CHAT_EFFORT` sets chat's).
 
 On a copy of a 41-message conversation, these changes cut what each call sends from about 32,000 tokens to about 5,600, and a two-call message cost about 3.5 cents.
+
+## Sign in and public decks
+
+The backend is closed to everyone but you, except for a deck's list. With `MTG_DECK_DOCTOR_PASSWORD` set, every route refuses a browser that hasn't signed in, except the login routes and the public deck routes below. Without a password, every route refuses every request (503) unless `MTG_DECK_DOCTOR_AUTH=off` says to run open, which `./dev-backend.sh` does. A password that is set always wins, so you can try the login locally by putting one in `.env`.
+
+- **Sign in.** The front end shows a password form until you sign in. The password is checked on the backend, which then sets a signed, HTTP-only cookie that lasts 30 days and is marked secure over HTTPS. **Sign out** is in the app bar.
+- **Changing the password** signs every browser out. The cookie is signed with a key made from the password and a random secret in `data/session_secret`, which the backend creates on first use. Keep that file with `data/`.
+- **Wrong passwords are throttled.** After 8 failures from one address in 10 minutes, that address gets a 429 until the window moves on. Behind a reverse proxy, `--proxy-headers` (which `serve.sh` passes) makes the address the visitor's, not the proxy's.
+- **A new route is closed by default.** Mark a route `@public` (in `auth.py`) to open it. `tests/test_auth.py` fails if the list of open routes changes.
+
+**Every deck's page is public to read.** Open `/decks/<id>` without signing in and you get the list, card details, rulings, stats and Export, and nothing else: no chat with the Doctor, no insights, no editing, no collection toggle, and no printing choices. Signed in, the same address is the whole deck page. The home page, search, your collection and Admin need the sign-in, so nobody can find a deck's address from the app. Send someone the address in your browser's address bar.
+
+These routes answer without a sign-in: `GET /public/decks/{id}`, `POST /public/decks/{id}/cards`, and `GET /public/decks/{id}/rulings`. The first returns the name, commander, colors, cards and last-updated date, and never the conversation or the keep list. The other two answer only for cards in that deck, so they can't be used to look up other cards through your server. A deck's id is 8 random hex characters, so an address can be guessed in principle. The printings you picked stay in your browser, so a viewer sees each card's default printing.
 
 ## Test
 
@@ -105,6 +134,8 @@ cd frontend && npx tsc -b && npm run lint
 | Path | Contents |
 | --- | --- |
 | `src/mtg_deck_doctor/api.py` | The FastAPI app and its routes. |
+| `src/mtg_deck_doctor/server.py` | Serves the API under `/api` and the built front end, for running the app on one address. |
+| `src/mtg_deck_doctor/auth.py` | The owner's login: the password check, the session cookie, and the throttle. |
 | `src/mtg_deck_doctor/tool_loop.py` | Every model call, with prompts, the chat's tools, and checks on what the model returns. |
 | `src/mtg_deck_doctor/edhrec.py`, `card_cache.py`, `game_changers.py` | EDHREC and Scryfall clients with local caches. |
 | `frontend/src/DeckView.tsx` | The deck page. |
@@ -114,7 +145,7 @@ cd frontend && npx tsc -b && npm run lint
 
 ## Data
 
-Decks, your collection, and API caches are stored as JSON files under `data/`. The folder is git-ignored and is created as you use the app. There is no database and no authentication, so the app is for one person on one machine.
+Decks, your collection, and API caches are stored as JSON files under `data/`. The folder is git-ignored and is created as you use the app. There is no database, so the app is for one person. Keep `data/` on a disk that persists.
 
 ## Limits
 

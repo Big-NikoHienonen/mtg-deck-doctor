@@ -20,7 +20,7 @@ export default function DeckSidebar({
   priceUsd: string | null | undefined;
   inDeck: boolean;
   owned: boolean;
-  // Left off where the collection isn't the viewer's to change (a shared deck).
+  // Left off where the collection isn't the viewer's to change (a deck seen signed out).
   onToggleOwned?: () => void;
   onOpen: () => void;
 }) {

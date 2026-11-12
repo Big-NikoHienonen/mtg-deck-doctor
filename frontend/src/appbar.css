@@ -70,6 +70,14 @@ a.app-bar-logo:hover .app-bar-name {
   white-space: nowrap;
 }
 
+/* Sign out is a button that looks like the links. */
+button.app-bar-link {
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
 .app-bar-link:hover {
   color: var(--text);
   background: color-mix(in srgb, var(--accent) 10%, transparent);

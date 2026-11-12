@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getCardInfoBatch, getSharedDeck, type CardInfo, type SharedDeck } from "./api";
+import { getPublicCardInfoBatch, getPublicDeck, getPublicRulings, type CardInfo, type PublicDeck } from "./api";
 import CardModal from "./CardModal";
 import DeckControls, { type ListSettings } from "./DeckControls";
 import DeckFooter from "./DeckFooter";
@@ -12,17 +12,19 @@ import { buildRows, deckStats, groupRows } from "./deckListModel";
 import ExportDecklistModal from "./ExportDecklistModal";
 import { buildDecklistText } from "./importExport";
 import { loadSettings, saveSettings } from "./listSettings";
+import SignInModal from "./SignInModal";
 import "./deckview.css";
 
 // A card lookup that comes back short (Scryfall rate-limited) is tried again a few times, slowly.
 const RETRY_DELAYS_MS = [30_000, 90_000, 180_000];
 
-// What a share link opens: the deck as its owner built it, to look at. It is the deck page with
-// nothing that changes the deck, and no Doctor. It only ever asks the backend for the shared list
-// and for card data, which is the same for everyone; the deck's id never reaches this page.
-export default function SharedDeckView() {
-  const { token } = useParams<{ token: string }>();
-  const [deck, setDeck] = useState<SharedDeck | null>(null);
+// A deck's page for someone who isn't signed in: the deck as its owner built it, to look at. It is the
+// deck page with nothing that changes the deck, and no Doctor. It only ever asks the backend for the
+// list and for data on the cards in it, through routes that need no sign-in. Once the owner signs in
+// (here, with the button), the same address shows the whole deck page instead.
+export default function PublicDeckView() {
+  const { deckId } = useParams<{ deckId: string }>();
+  const [deck, setDeck] = useState<PublicDeck | null>(null);
   const [status, setStatus] = useState<"loading" | "missing" | "error" | "ready">("loading");
   const [cardInfo, setCardInfo] = useState<Record<string, CardInfo>>({});
   const [unresolved, setUnresolved] = useState(0);
@@ -31,6 +33,8 @@ export default function SharedDeckView() {
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const [modalCard, setModalCard] = useState<string | null>(null);
   const [exportText, setExportText] = useState<string | null>(null);
+  const [signingIn, setSigningIn] = useState(false);
+  const loadRulings = useCallback((id: string) => getPublicRulings(deckId ?? "", id), [deckId]);
 
   // The deck page is wider than the rest of the app.
   useEffect(() => {
@@ -40,19 +44,19 @@ export default function SharedDeckView() {
   }, []);
 
   useEffect(() => {
-    if (!token) return;
+    if (!deckId) return;
     setStatus("loading");
-    getSharedDeck(token)
+    getPublicDeck(deckId)
       .then((found) => {
         setDeck(found);
         setStatus(found ? "ready" : "missing");
       })
       .catch(() => setStatus("error"));
-  }, [token]);
+  }, [deckId]);
 
   // Card data for the list, from the backend's cache. A retry re-runs this, and only asks for what is still missing.
   useEffect(() => {
-    if (!deck) return;
+    if (!deck || !deckId) return;
     const names = deck.commander ? [...deck.cards, deck.commander] : deck.cards;
     const missing = Array.from(new Set(names)).filter((name) => !(name in cardInfo));
     if (missing.length === 0) {
@@ -60,7 +64,7 @@ export default function SharedDeckView() {
       return;
     }
     let cancelled = false;
-    getCardInfoBatch(missing).then((result) => {
+    getPublicCardInfoBatch(deckId, missing).then((result) => {
       if (cancelled) return;
       setCardInfo((prev) => ({ ...prev, ...result.info }));
       const stillMissing = missing.length - Object.keys(result.info).length;
@@ -85,12 +89,10 @@ export default function SharedDeckView() {
     return (
       <div style={{ padding: 24 }}>
         <p style={{ fontSize: 18, fontWeight: 600, margin: "0 0 8px" }}>
-          {status === "missing" ? "This deck isn't shared" : "Couldn't load this deck"}
+          {status === "missing" ? "There's no deck here" : "Couldn't load this deck"}
         </p>
         <p style={{ color: "var(--text-muted)", margin: 0 }}>
-          {status === "missing"
-            ? "The link may be mistyped, or its owner turned it off. Ask them for a new one."
-            : "Reload the page in a moment."}
+          {status === "missing" ? "The address may be mistyped, or the deck was deleted." : "Reload the page in a moment."}
         </p>
       </div>
     );
@@ -140,7 +142,9 @@ export default function SharedDeckView() {
             Export
           </button>
           <div className="dv-grow" />
-          <span style={{ fontSize: 13, color: "var(--text-muted)" }}>A shared deck, to look at</span>
+          <button className="dv-action" onClick={() => setSigningIn(true)}>
+            Sign in to edit
+          </button>
         </div>
 
         <div className="dv-main">
@@ -176,12 +180,15 @@ export default function SharedDeckView() {
           info={cardInfo[modalCard]}
           printing={undefined}
           isCommander={modalIsCommander}
+          loadRulings={loadRulings}
           onNavigate={navigateModal}
           hasPrevious={modalIndex > 0}
           hasNext={modalIndex >= 0 && modalIndex < orderedNames.length - 1}
           onClose={() => setModalCard(null)}
         />
       )}
+
+      {signingIn && <SignInModal onClose={() => setSigningIn(false)} />}
 
       {exportText !== null && <ExportDecklistModal text={exportText} onClose={() => setExportText(null)} />}
 

@@ -39,6 +39,7 @@ export default function CardModal({
   hasPrevious,
   hasNext,
   isCommander,
+  loadRulings = getRulings,
 }: {
   name: string;
   // The card's Scryfall id, for its art. Passed by the caller since it
@@ -62,6 +63,8 @@ export default function CardModal({
   hasNext?: boolean;
   // The deck's commander: shown as such instead of a copy count, with no add or remove controls.
   isCommander?: boolean;
+  // Where rulings come from. The public deck page passes its own, since it isn't signed in.
+  loadRulings?: (id: string) => Promise<Ruling[] | null>;
   // Only passed from a context with no single fixed deck (the card-search
   // page) — lets the viewer pick which deck this card should go into right
   // here, instead of the modal being scoped to whatever deck the page
@@ -200,7 +203,7 @@ export default function CardModal({
     // uncached one costs a throttled Scryfall request — waiting a beat
     // means cards you only pass through never trigger one.
     const timer = setTimeout(() => {
-      getRulings(id).then((result) => {
+      loadRulings(id).then((result) => {
         if (!cancelled) setRulings(result);
       });
     }, 200);
@@ -208,7 +211,7 @@ export default function CardModal({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [info?.id]);
+  }, [info?.id, loadRulings]);
 
   const priceUsd = priceUsdOf(printing, info?.priceUsd);
   const foil = !!printing?.foil;

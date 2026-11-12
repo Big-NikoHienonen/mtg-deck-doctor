@@ -6,6 +6,7 @@ network and no model: both are stubbed. Run with
 """
 
 import json
+import os
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace as NS
@@ -157,6 +158,9 @@ older = [
 shown = T.compact_history(older)
 check("earlier turns show the model what it said, not the proposal calls, and the history stays valid", all(b.get("type") == "text" for m in shown if isinstance(m["content"], list) for b in m["content"]) and shown[-1] == older[-1], str(shown))
 
+# These tests aren't about the login (see test_auth.py), so they run open, whatever password .env sets.
+os.environ.pop("MTG_DECK_DOCTOR_PASSWORD", None)
+os.environ["MTG_DECK_DOCTOR_AUTH"] = "off"
 c = TestClient(api.app, raise_server_exceptions=False)
 make_deck("d5")
 script[:] = [

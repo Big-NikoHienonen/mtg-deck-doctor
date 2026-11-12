@@ -2,7 +2,7 @@ import type { ListSettings } from "./DeckControls";
 import { GROUP_LABELS, SORT_LABELS, VIEW_LABELS } from "./deckListModel";
 
 // How a deck's list is shown (view, grouping, sort, extras) is a per-viewer preference, kept in the
-// browser and shared by every deck page, the owner's and a shared one.
+// browser and shared by every deck page, the owner's and the one anyone can look at.
 const SETTINGS_KEY = "mtg-deck-doctor:deckView";
 const DEFAULT_SETTINGS: ListSettings = { view: "text", groupBy: "type", sortBy: "name", showMana: true, showPrices: false };
 

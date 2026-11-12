@@ -27,7 +27,7 @@ export default function DeckHero({
   showCommander: boolean;
   // Opens the commander's card details.
   onOpenCommander: () => void;
-  // The way back to the owner's decks. Left off for someone looking at a shared deck.
+  // The way back to the owner's decks. Left off for someone who isn't signed in.
   showBack?: boolean;
   // The name, as a heading; the page decides how it is renamed.
   title: ReactNode;

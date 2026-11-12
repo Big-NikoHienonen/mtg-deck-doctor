@@ -40,6 +40,9 @@ def lookup(name: str) -> dict:
 
 
 T.lookup_card = lookup
+# These tests aren't about the login (see test_auth.py), so they run open, whatever password .env sets.
+os.environ.pop("MTG_DECK_DOCTOR_PASSWORD", None)
+os.environ["MTG_DECK_DOCTOR_AUTH"] = "off"
 c = TestClient(api.app, raise_server_exceptions=False)
 count = lambda: len(D.list_decks())
 

@@ -240,6 +240,9 @@ except U.AiBudgetExceeded:
 check("with the day's budget spent, a chat message is refused before any call", stopped and requests == [])
 
 # --- over HTTP -----------------------------------------------------------------------------------------
+# These tests aren't about the login (see test_auth.py), so they run open, whatever password .env sets.
+os.environ.pop("MTG_DECK_DOCTOR_PASSWORD", None)
+os.environ["MTG_DECK_DOCTOR_AUTH"] = "off"
 c = TestClient(api.app, raise_server_exceptions=False)
 made = c.post("/decks").json()
 r = c.post(f"/decks/{made['id']}/chat", json={"message": "hi"})

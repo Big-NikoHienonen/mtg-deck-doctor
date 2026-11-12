@@ -1,6 +1,8 @@
 import { clearAiProblem, reportAiProblem } from "./aiStatus";
 
-const API_BASE = "http://localhost:8000";
+// The backend is on the page's own address under /api: in production the backend serves the page too
+// (server.py), and in development Vite sends /api to the backend on port 8000 (vite.config.ts).
+const API_BASE = "/api";
 
 // fetch() itself rejects on a network-level failure (offline, DNS, a CORS
 // block with no response at all) — distinct from a normal non-2xx
@@ -11,9 +13,17 @@ const API_BASE = "http://localhost:8000";
 // one, and a hard-fail function (throws) throws the same message either
 // way — never an unhandled TypeError surfacing as an uncaught rejection
 // at a lazy .then() call site with no .catch().
+// Set by the sign-in state (authStore.ts), and called when the backend refuses a request because this
+// browser isn't signed in: the session ended, or the password changed.
+let unauthorizedHandler: (() => void) | null = null;
+export function onUnauthorized(handler: () => void) {
+  unauthorizedHandler = handler;
+}
+
 async function safeFetch(input: string | URL, init?: RequestInit): Promise<Response | null> {
   try {
     const res = await fetch(input, init);
+    if (res.status === 401 && !String(input).includes("/auth/")) unauthorizedHandler?.();
     // A model call that failed for a reason outside the request (see
     // backend/ai_errors.py) is recorded once, here, for the whole page.
     if (!res.ok && (res.status === 429 || res.status === 502 || res.status === 503)) {
@@ -59,8 +69,6 @@ export type Deck = {
   // Cards the owner marked as keepers — never offered as cut candidates.
   keep: string[];
   messages: Message[];
-  // Set while the deck is shared by link: the token in the link (/s/<token>). Only the owner sees it.
-  share_token: string | null;
   updated_at: string;
   // Counts saves; the backend refuses to save over a version it hasn't seen.
   version: number;
@@ -114,24 +122,9 @@ export async function getDeck(id: string): Promise<Deck | null> {
   return res.json();
 }
 
-// Turns on the deck's share link (the same one if it is already on), or off for good. Off, the old link
-// opens nothing, even if the deck is shared again.
-export async function shareDeck(id: string): Promise<Deck> {
-  return changeSharing(id, "POST");
-}
-
-export async function unshareDeck(id: string): Promise<Deck> {
-  return changeSharing(id, "DELETE");
-}
-
-async function changeSharing(id: string, method: "POST" | "DELETE"): Promise<Deck> {
-  const res = await safeFetch(`${API_BASE}/decks/${id}/share`, { method });
-  if (!res || !res.ok) throw new Error("Couldn't change whether this deck is shared. Try again.");
-  return res.json();
-}
-
-// What a share link shows: the list, and nothing that could change the deck or use the Doctor on it.
-export type SharedDeck = {
+// What anyone can see of a deck without signing in: the list, and nothing that could change the deck
+// or use the Doctor on it.
+export type PublicDeck = {
   name: string | null;
   commander: string | null;
   commander_color_identity: string[];
@@ -139,13 +132,40 @@ export type SharedDeck = {
   updated_at: string;
 };
 
-// The deck a share link opens, or null if there is none: the link was never shared, or was turned off.
-export async function getSharedDeck(token: string): Promise<SharedDeck | null> {
-  const res = await safeFetch(`${API_BASE}/shared/${encodeURIComponent(token)}`);
+// The deck at this address as a stranger sees it, or null if there is none.
+export async function getPublicDeck(deckId: string): Promise<PublicDeck | null> {
+  const res = await safeFetch(`${API_BASE}/public/decks/${encodeURIComponent(deckId)}`);
   if (!res) throw new Error("failed to load deck");
   if (res.status === 404) return null;
   if (!res.ok) throw new Error("failed to load deck");
   return res.json();
+}
+
+export type AuthStatus = { required: boolean; configured: boolean; signed_in: boolean };
+
+// Whether the backend asks for a password, and whether this browser has entered it. Null when the
+// backend can't be reached.
+export async function getAuthStatus(): Promise<AuthStatus | null> {
+  const res = await safeFetch(`${API_BASE}/auth/status`);
+  if (!res || !res.ok) return null;
+  return res.json();
+}
+
+// Null once signed in, otherwise what to tell the person.
+export async function logIn(password: string): Promise<string | null> {
+  const res = await safeFetch(`${API_BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  if (!res) return "Couldn't reach the Deck Doctor backend. Is it running on port 8000?";
+  if (res.ok) return null;
+  const body = await res.json().catch(() => null);
+  return typeof body?.detail === "string" ? body.detail : "That didn't work.";
+}
+
+export async function logOut(): Promise<void> {
+  await safeFetch(`${API_BASE}/auth/logout`, { method: "POST" });
 }
 
 export async function sendMessage(id: string, message: string): Promise<{ reply: string; deck: Deck }> {
@@ -680,6 +700,26 @@ export type Ruling = { source: string; publishedAt: string; comment: string };
 // distinct from [] ("this card has no rulings").
 export async function getRulings(id: string): Promise<Ruling[] | null> {
   const res = await safeFetch(`${API_BASE}/cards/rulings?id=${encodeURIComponent(id)}`);
+  if (!res || !res.ok) return null;
+  return (await res.json()).rulings;
+}
+
+// The public deck page's own versions of the two card lookups above. They answer for the cards in
+// that deck only, so they need no sign-in.
+export async function getPublicCardInfoBatch(deckId: string, names: string[]): Promise<CardInfoBatchResult> {
+  if (names.length === 0) return { info: {}, notFound: [], failed: [] };
+  const res = await safeFetch(`${API_BASE}/public/decks/${encodeURIComponent(deckId)}/cards`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ names }),
+  });
+  if (!res || !res.ok) return { info: {}, notFound: [], failed: [...names] };
+  const data = await res.json();
+  return { info: data.info, notFound: data.not_found, failed: data.failed };
+}
+
+export async function getPublicRulings(deckId: string, id: string): Promise<Ruling[] | null> {
+  const res = await safeFetch(`${API_BASE}/public/decks/${encodeURIComponent(deckId)}/rulings?id=${encodeURIComponent(id)}`);
   if (!res || !res.ok) return null;
   return (await res.json()).rulings;
 }

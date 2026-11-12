@@ -1,17 +1,20 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { signOut, useAuth } from "./authStore";
 import Logo from "./Logo";
 import NewDeckModal from "./NewDeckModal";
 import ThemePicker from "./ThemePicker";
 import "./appbar.css";
 
 // The bar along the top of every page: the logo, which goes home, the places to go from anywhere (My
-// decks is home too, named for what is there), New deck, and the theme. New deck is a window over whatever page you are on, so it lives here.
-// On a shared deck (/s/…) the person looking isn't the owner, so there is the name and the theme and
-// nothing to go to.
+// decks is home too, named for what is there), New deck, and the theme. New deck is a window over
+// whatever page you are on, so it lives here. Sign out shows when the backend asks for a password.
+// Someone who isn't signed in, looking at a deck or at the sign-in page, gets the name and the theme and
+// nothing to go to. So does the moment before it is known whether this browser is signed in.
 export default function AppBar() {
   const { pathname, search } = useLocation();
-  const sharedView = pathname.startsWith("/s/");
+  const auth = useAuth();
+  const showNav = auth.checked && !auth.unreachable && auth.configured && (!auth.required || auth.signedIn);
   const [newDeckOpen, setNewDeckOpen] = useState(false);
 
   // My collection and Search cards are both the card search page, told apart by what it was asked.
@@ -26,18 +29,18 @@ export default function AppBar() {
   return (
     <header className="app-bar">
       <div className="app-bar-inner">
-        {sharedView ? (
-          <div className="app-bar-logo">
-            <Logo />
-            <span className="app-bar-name">MTG Deck Doctor</span>
-          </div>
-        ) : (
+        {showNav ? (
           <Link to="/" className="app-bar-logo" aria-label="MTG Deck Doctor, home">
             <Logo />
             <span className="app-bar-name">MTG Deck Doctor</span>
           </Link>
+        ) : (
+          <div className="app-bar-logo">
+            <Logo />
+            <span className="app-bar-name">MTG Deck Doctor</span>
+          </div>
         )}
-        {!sharedView && (
+        {showNav && (
           <>
             <nav className="app-bar-nav" aria-label="Main">
               {links.map((l) => (
@@ -49,6 +52,11 @@ export default function AppBar() {
             <button type="button" className="app-bar-new" onClick={() => setNewDeckOpen(true)}>
               New deck
             </button>
+            {auth.required && (
+              <button type="button" className="app-bar-link" onClick={() => signOut()}>
+                Sign out
+              </button>
+            )}
           </>
         )}
         <ThemePicker />
