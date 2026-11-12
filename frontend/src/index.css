@@ -1,20 +1,19 @@
 @import url("https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=Source+Serif+4:ital@1&display=swap");
 
 :root {
-  --bg: #efe6d3;
-  --surface: #f7f0de;
-  --border: #c9b98f;
-  --text: #2b2018;
-  --text-muted: #5a4a34;
-  --accent: #7a2e2e;
-  --accent-gold: #b08c3e;
-  --user-bubble: #e3d6b4;
-  /* Brighter, more saturated than --accent (the muted oxblood used for
-     links/active-tab text elsewhere) — reserved for destructive-action
-     buttons, which need to actually read as "red", not just accented. */
-  --danger: #c0392b;
+  /* The default theme's colors (DEFAULT_THEME in themes.ts), for the moment before a theme is applied. */
+  --bg: #0c0a18;
+  --surface: #151228;
+  --border: #38335f;
+  --text: #f0ebff;
+  --text-muted: #aca4d4;
+  --accent: #ff4fa3;
+  --accent-gold: #35e6e0;
+  --user-bubble: #1f1b3d;
+  /* Reserved for destructive-action buttons, which need to actually read as "red", not just accented. */
+  --danger: #ff8f8f;
   /* The counterpart to --danger: a card being added, a swap being applied. */
-  --positive: #3b7d3a;
+  --positive: #4af0b0;
 }
 
 * {

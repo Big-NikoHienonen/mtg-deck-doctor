@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { THEMES, useTheme } from "./themes";
+import { THEMES, themeById, useTheme } from "./themes";
 import "./themepicker.css";
 
 // A small control in the app bar: pick the plane the app looks like.
@@ -7,7 +7,7 @@ export default function ThemePicker() {
   const [id, setTheme] = useTheme();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const current = THEMES.find((t) => t.id === id) ?? THEMES[0];
+  const current = themeById(id);
 
   useEffect(() => {
     if (!open) return;

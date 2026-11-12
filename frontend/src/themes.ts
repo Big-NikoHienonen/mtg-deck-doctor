@@ -109,6 +109,15 @@ export const THEMES: Theme[] = [
 // ---- choosing and keeping one ----
 
 const KEY = "mtg-deck-doctor:theme";
+
+// What a browser that hasn't picked a theme gets, and what an id that no longer exists falls back to.
+// Keep the :root colors in index.css the same as this theme's, so the page doesn't flash in another
+// look before the theme is applied.
+export const DEFAULT_THEME = "kamigawa";
+
+export function themeById(id: string): Theme {
+  return THEMES.find((t) => t.id === id) ?? THEMES.find((t) => t.id === DEFAULT_THEME) ?? THEMES[0];
+}
 const listeners = new Set<() => void>();
 
 function stored(): string {
@@ -118,13 +127,13 @@ function stored(): string {
   } catch {
     // no saved choice, or the browser won't say
   }
-  return "dominaria";
+  return DEFAULT_THEME;
 }
 
 let current = stored();
 
 export function applyTheme(id: string): void {
-  const theme = THEMES.find((t) => t.id === id) ?? THEMES[0];
+  const theme = themeById(id);
   const root = document.documentElement;
   for (const key of Object.keys(CSS_VARS) as (keyof Palette)[]) root.style.setProperty(CSS_VARS[key], theme.colors[key]);
   root.dataset.theme = theme.id;
