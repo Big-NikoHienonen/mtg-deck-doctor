@@ -1,0 +1,36 @@
+# Fly.io config. See "Deploy on Fly.io" in the README for the steps.
+
+# The app name is global on Fly. If it is taken, `fly launch --no-deploy --copy-config` asks for another.
+app = "mtg-deck-doctor"
+primary_region = "arn"
+
+[build]
+
+[env]
+  # Not secret, so it can live here. Set the daily spend limit for the Doctor, in US dollars, then
+  # redeploy. The API key and the login password are secrets: `fly secrets set` (see the README).
+  # AI_DAILY_BUDGET_USD = "5"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # One Machine that stays up. The decks are files on one volume, and a volume attaches to one Machine,
+  # so this app must not run on more than one. Autostop and autostart are set together.
+  auto_stop_machines = "off"
+  auto_start_machines = false
+
+  [[http_service.checks]]
+    grace_period = "20s"
+    interval = "30s"
+    method = "GET"
+    timeout = "5s"
+    path = "/api/auth/status"
+
+[mounts]
+  source = "mtg_deck_doctor_data"
+  destination = "/app/data"
+  initial_size = "1gb"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

@@ -1,0 +1,14 @@
+# Keep secrets, local data and anything the build makes itself out of the image.
+.git
+.idea
+.claude
+.ruff_cache
+.venv
+.env
+**/__pycache__
+data
+tests
+frontend/node_modules
+frontend/dist
+/README.md
+/BACKLOG.md

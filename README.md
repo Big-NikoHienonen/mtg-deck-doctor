@@ -83,6 +83,50 @@ It builds the front end and starts the backend on `127.0.0.1:8000`. Set `HOST` a
 
 A deck's address, `<address>/decks/<id>`, then opens a read-only view of the list for anyone who can reach it. For a quick test from your own machine, point a tunnel at port 8000. To host it, you need a disk that persists, because decks, your collection, and the caches are files under `data/`, and `data/session_secret` signs the login cookie.
 
+## Deploy on Fly.io
+
+The `Dockerfile` builds the front end and runs the backend, which serves it and the API (see [Run it for other people](#run-it-for-other-people)). `fly.toml` runs it as one Machine (`shared-cpu-1x`, 512 MB) in Stockholm (`arn`) with a 1 GB volume at `/app/data`. The decks are files on that volume, and a volume attaches to one Machine, so don't scale the app past one. Install [flyctl](https://fly.io/docs/flyctl/install/) and sign in with `fly auth login`, then, from the project root, create the app without deploying it:
+
+```bash
+fly launch --no-deploy --copy-config --ha=false
+```
+
+Set the two secrets. Use a password of its own, not the one in your local `.env`:
+
+```bash
+fly secrets set ANTHROPIC_API_KEY=<your key> MTG_DECK_DOCTOR_PASSWORD=<a new password>
+```
+
+Deploy. The first deploy creates the volume:
+
+```bash
+fly deploy --ha=false
+```
+
+Open the app with `fly open`, and sign in with the new password. A deck's address is then `https://<app>.fly.dev/decks/<id>`.
+
+To bring your local decks along, copy them to the volume once the Machine is running. Decks and your collection can't be rebuilt, and the saved AI results (`suggestions`, `cuts`, `discoveries`) cost tokens to regenerate. The caches rebuild by themselves:
+
+```bash
+fly ssh sftp put -R data/decks /app/data/decks
+fly ssh sftp put data/collection.json /app/data/collection.json
+fly ssh sftp put -R data/suggestions /app/data/suggestions
+fly ssh sftp put -R data/cuts /app/data/cuts
+fly ssh sftp put -R data/discoveries /app/data/discoveries
+fly ssh console -C "ls /app/data"
+```
+
+Don't copy `data/session_secret`. The server makes its own.
+
+To cap the Doctor's spend, uncomment `AI_DAILY_BUDGET_USD` in `fly.toml`, set a number, and run `fly deploy --ha=false` again. Also set a spend limit on the key in the Anthropic console.
+
+To run the image locally, with Docker running:
+
+```bash
+docker build -t mtg-deck-doctor .
+docker run -p 8080:8080 -e ANTHROPIC_API_KEY=<your key> -e MTG_DECK_DOCTOR_PASSWORD=<a password> -v mtg-data:/app/data mtg-deck-doctor
+```
+
 ## AI usage and limits
 
 The Doctor's model calls are the app's only real running cost, so they are metered:
@@ -134,6 +178,7 @@ cd frontend && npx tsc -b && npm run lint
 | Path | Contents |
 | --- | --- |
 | `src/mtg_deck_doctor/api.py` | The FastAPI app and its routes. |
+| `Dockerfile`, `fly.toml` | The image, and its Fly.io config. |
 | `src/mtg_deck_doctor/server.py` | Serves the API under `/api` and the built front end, for running the app on one address. |
 | `src/mtg_deck_doctor/auth.py` | The owner's login: the password check, the session cookie, and the throttle. |
 | `src/mtg_deck_doctor/tool_loop.py` | Every model call, with prompts, the chat's tools, and checks on what the model returns. |
