@@ -13,6 +13,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 import mtg_deck_doctor.deck as D
+import mtg_deck_doctor.tool_loop as T
 from mtg_deck_doctor import api
 
 D.DECKS_DIR = Path(tempfile.mkdtemp()) / "decks"
@@ -28,6 +29,18 @@ def check(name: str, ok: object, detail: str = "") -> None:
 os.environ.pop("MTG_DECK_DOCTOR_PASSWORD", None)
 os.environ["MTG_DECK_DOCTOR_AUTH"] = "off"
 c = TestClient(api.app, raise_server_exceptions=False)
+
+# A visitor gets no AI of any kind: any call to the model from here is recorded, and fails.
+model_calls: list[str] = []
+
+
+class _TrippedModel:
+    def __getattr__(self, name):
+        model_calls.append(name)
+        raise RuntimeError("the model was called")
+
+
+T.client = _TrippedModel()
 
 SECRET_CHAT = "the-owner's-private-question"
 deck = D.Deck(
@@ -99,6 +112,8 @@ check("a stranger gets rulings for a card in the deck", res.status_code == 200 a
 check("...but not for one that isn't", c.get("/public/decks/aaaa1111/rulings", params={"id": "id-Counterspell"}).status_code == 404)
 check("...nor for a deck that doesn't exist", c.get("/public/decks/deadbeef/rulings", params={"id": "id-Sol Ring"}).status_code == 404)
 api.get_card_info_batch, api.peek_card_info, api.get_rulings = real
+
+check("none of that called the model", not model_calls, str(model_calls))
 
 # --- deleting ----------------------------------------------------------------------------------------------------------
 

@@ -351,10 +351,10 @@ def login_endpoint(body: LoginRequest, request: Request, response: Response) -> 
     client = _client(request)
     wait = auth.throttle.retry_after(client)
     if wait:
-        raise HTTPException(status_code=429, detail="Too many wrong passwords. Try again later.", headers={"Retry-After": str(wait)})
+        raise HTTPException(status_code=429, detail="Too many attempts. Try again later.", headers={"Retry-After": str(wait)})
     if not auth.password_ok(body.password):
         auth.throttle.record_failure(client)
-        raise HTTPException(status_code=401, detail="That isn't the password.")
+        raise HTTPException(status_code=401, detail="Incorrect password.")
     auth.throttle.reset(client)
     response.set_cookie(
         auth.COOKIE,

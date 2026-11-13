@@ -1,0 +1,70 @@
+/* What someone who isn't signed in sees at the front door: the mark, what the app is, and nothing else. */
+
+.guest {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  max-width: 860px;
+  margin: 10vh auto 0;
+  text-align: center;
+}
+
+/* The theme's own title face, as in the app bar. */
+.guest-name {
+  margin: 0;
+  font-family: var(--dv-title-font);
+  font-weight: var(--dv-title-weight);
+  letter-spacing: var(--dv-title-spacing);
+  font-size: 44px;
+  line-height: 1.1;
+}
+
+.guest-tagline {
+  margin: 0;
+  color: var(--accent);
+  font-size: 20px;
+}
+
+.guest-features {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 12px;
+  text-align: left;
+}
+
+.guest-feature {
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.guest-feature h2 {
+  margin: 0 0 8px;
+  color: var(--accent);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.guest-feature p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+@media (max-width: 720px) {
+  .guest {
+    margin-top: 6vh;
+  }
+
+  .guest-name {
+    font-size: 34px;
+  }
+
+  .guest-features {
+    grid-template-columns: 1fr;
+  }
+}

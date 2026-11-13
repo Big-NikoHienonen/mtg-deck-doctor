@@ -160,8 +160,13 @@ export async function logIn(password: string): Promise<string | null> {
   });
   if (!res) return "Couldn't reach the Deck Doctor backend. Is it running on port 8000?";
   if (res.ok) return null;
+  if (res.status === 401) return "Incorrect password.";
+  if (res.status === 429) {
+    const minutes = Math.max(1, Math.ceil(Number(res.headers.get("Retry-After")) / 60));
+    return `Too many attempts. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`;
+  }
   const body = await res.json().catch(() => null);
-  return typeof body?.detail === "string" ? body.detail : "That didn't work.";
+  return typeof body?.detail === "string" ? body.detail : "Couldn't sign in. Try again.";
 }
 
 export async function logOut(): Promise<void> {

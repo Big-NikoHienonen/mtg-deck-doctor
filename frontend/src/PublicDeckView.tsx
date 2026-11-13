@@ -12,16 +12,15 @@ import { buildRows, deckStats, groupRows } from "./deckListModel";
 import ExportDecklistModal from "./ExportDecklistModal";
 import { buildDecklistText } from "./importExport";
 import { loadSettings, saveSettings } from "./listSettings";
-import SignInModal from "./SignInModal";
 import "./deckview.css";
 
 // A card lookup that comes back short (Scryfall rate-limited) is tried again a few times, slowly.
 const RETRY_DELAYS_MS = [30_000, 90_000, 180_000];
 
-// A deck's page for someone who isn't signed in: the deck as its owner built it, to look at. It is the
-// deck page with nothing that changes the deck, and no Doctor. It only ever asks the backend for the
-// list and for data on the cards in it, through routes that need no sign-in. Once the owner signs in
-// (here, with the button), the same address shows the whole deck page instead.
+// A deck's page for someone who isn't signed in, who got here from a link its owner sent: the deck to
+// look at, and a card's details on a click. Nothing changes the deck, and nothing here calls the model.
+// It only asks the backend for the list and for data on the cards in it, through routes that need no
+// sign-in. Once the owner signs in (from the app bar), the same address shows the whole deck page.
 export default function PublicDeckView() {
   const { deckId } = useParams<{ deckId: string }>();
   const [deck, setDeck] = useState<PublicDeck | null>(null);
@@ -33,7 +32,6 @@ export default function PublicDeckView() {
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const [modalCard, setModalCard] = useState<string | null>(null);
   const [exportText, setExportText] = useState<string | null>(null);
-  const [signingIn, setSigningIn] = useState(false);
   const loadRulings = useCallback((id: string) => getPublicRulings(deckId ?? "", id), [deckId]);
 
   // The deck page is wider than the rest of the app.
@@ -141,10 +139,6 @@ export default function PublicDeckView() {
           <button className="dv-action" onClick={() => setExportText(buildDecklistText(deck, cardCounts, cardInfo))}>
             Export
           </button>
-          <div className="dv-grow" />
-          <button className="dv-action" onClick={() => setSigningIn(true)}>
-            Sign in to edit
-          </button>
         </div>
 
         <div className="dv-main">
@@ -187,8 +181,6 @@ export default function PublicDeckView() {
           onClose={() => setModalCard(null)}
         />
       )}
-
-      {signingIn && <SignInModal onClose={() => setSigningIn(false)} />}
 
       {exportText !== null && <ExportDecklistModal text={exportText} onClose={() => setExportText(null)} />}
 
