@@ -1,10 +1,8 @@
-import { scryfallImageUrlById, type ImageVersion, type Printing } from "./api";
+import { scryfallImageUrlById, setDeckPrintings, type Deck, type ImageVersion, type Printing } from "./api";
 
-// Which specific printing's art (and price) to show for a card is a
-// per-viewer display preference, not deck data — it doesn't affect
-// legality or validation, which is keyed on card name only. Persisted in
-// localStorage per deck, same reasoning as the images/list view toggle,
-// and deliberately never sent to the backend.
+// Which specific printing's art (and price) to show for a card is the deck owner's choice. It is kept
+// with the deck on the backend (Deck.printings), so a visitor sees the same art, and it doesn't affect
+// legality or validation, which is keyed on card name only.
 export type SelectedPrinting = {
   id: string;
   setName: string;
@@ -51,43 +49,49 @@ export function priceUsdOf(printing: SelectedPrinting | undefined, fallback: str
   return price ?? fallback ?? null;
 }
 
-function storageKey(deckId: string): string {
+// Printings used to be kept in this browser only, per deck. adoptLegacyPrintings moves a deck's into the
+// deck, once: when the deck has none of its own and this browser has some for it. The browser's copy is
+// deleted once the backend has them. A failure leaves everything as it was, to be tried again next time.
+function legacyKey(deckId: string): string {
   return `mtg-deck-doctor:printings:${deckId}`;
 }
 
-export function loadSelectedPrintings(deckId: string): Record<string, SelectedPrinting> {
-  try {
-    const raw = localStorage.getItem(storageKey(deckId));
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
+function asPrinting(value: unknown): SelectedPrinting | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as Record<string, unknown>;
+  if (typeof v.id !== "string") return null;
+  return {
+    id: v.id,
+    setName: typeof v.setName === "string" ? v.setName.slice(0, 120) : "",
+    priceUsd: typeof v.priceUsd === "string" ? v.priceUsd : null,
+    ...(typeof v.priceUsdFoil === "string" ? { priceUsdFoil: v.priceUsdFoil } : {}),
+    ...(Array.isArray(v.finishes) ? { finishes: v.finishes.filter((f): f is string => typeof f === "string").slice(0, 8) } : {}),
+    foil: v.foil === true,
+  };
 }
 
-export function saveSelectedPrinting(
-  deckId: string,
-  cardName: string,
-  printing: SelectedPrinting,
-): Record<string, SelectedPrinting> {
-  const all = loadSelectedPrintings(deckId);
-  all[cardName] = printing;
+export async function adoptLegacyPrintings(deck: Deck): Promise<Deck> {
+  if (Object.keys(deck.printings ?? {}).length > 0) return deck;
+  let legacy: Record<string, unknown>;
   try {
-    localStorage.setItem(storageKey(deckId), JSON.stringify(all));
+    legacy = JSON.parse(localStorage.getItem(legacyKey(deck.id)) ?? "{}");
   } catch {
-    // per-viewer convenience only — fine if it's unavailable
+    return deck;
   }
-  return all;
-}
-
-export function clearSelectedPrinting(deckId: string, cardName: string): Record<string, SelectedPrinting> {
-  const all = loadSelectedPrintings(deckId);
-  delete all[cardName];
+  const inDeck = new Set(deck.commander ? [...deck.cards, deck.commander] : deck.cards);
+  const usable: Record<string, SelectedPrinting> = {};
+  for (const [name, value] of Object.entries(legacy)) {
+    const printing = inDeck.has(name) ? asPrinting(value) : null;
+    if (printing) usable[name] = printing;
+  }
+  if (Object.keys(usable).length === 0) return deck;
   try {
-    localStorage.setItem(storageKey(deckId), JSON.stringify(all));
+    const updated = await setDeckPrintings(deck.id, usable);
+    localStorage.removeItem(legacyKey(deck.id));
+    return updated;
   } catch {
-    // per-viewer convenience only
+    return deck;
   }
-  return all;
 }
 
 // Whether a printing matches what was typed in the picker's search box. Every
@@ -106,7 +110,7 @@ export function matchesPrinting(printing: Printing, query: string): boolean {
   return words.every((w) => (w.startsWith("#") ? Boolean(number?.startsWith(w.slice(1))) : text.includes(w)));
 }
 
-// A printing the viewer picked wins; otherwise the card's own
+// A printing the owner picked wins; otherwise the card's own
 // (default-printing) Scryfall id. null while neither is known yet — callers
 // show a placeholder rather than a request that can't succeed.
 export function cardImageUrl(

@@ -39,6 +39,10 @@ class Deck:
     # candidates. Names, not counts: it's about the card, not copies.
     keep: list[str] = field(default_factory=list)
     messages: list[dict] = field(default_factory=list)
+    # The printing the owner uses for each card, by card name: its Scryfall id and what the page needs
+    # to show it (set name, prices, finishes, whether it is used as the foil). Anyone who opens the
+    # deck's page sees these, so a deck looks the same to a visitor as it does to its owner.
+    printings: dict[str, dict] = field(default_factory=dict)
     updated_at: str = field(default_factory=_now)
     # Counts saves. save_deck only writes over the version it was loaded at,
     # so a copy that's gone stale can't silently overwrite newer changes.
@@ -191,6 +195,7 @@ def duplicate_deck(deck_id: str) -> Deck | None:
         commander_color_identity=list(original.commander_color_identity),
         cards=list(original.cards),
         keep=list(original.keep),
+        printings={name: dict(choice) for name, choice in original.printings.items()},
     )
     save_deck(copy)
     return copy
@@ -270,6 +275,25 @@ def save_messages(deck: Deck, messages: list[dict]) -> None:
     is on disk now, not whatever it was when the turn began."""
     deck.messages = messages
     save_deck(deck)
+
+
+@retry_on_conflict
+def set_printings(deck: Deck, changes: dict[str, dict | None]) -> dict:
+    """Sets the printing used for each named card, or clears it where the change is None, in one save.
+    A card has to be in the deck (or be its commander) to get one."""
+    for name, choice in changes.items():
+        if choice is not None and name not in deck.cards and name != deck.commander:
+            return {"error": f"{name!r} is not in the deck"}
+    updated = dict(deck.printings)
+    for name, choice in changes.items():
+        if choice is None:
+            updated.pop(name, None)
+        else:
+            updated[name] = choice
+    if updated != deck.printings:
+        deck.printings = updated
+        save_deck(deck)
+    return {"printings": deck.printings}
 
 
 @retry_on_conflict

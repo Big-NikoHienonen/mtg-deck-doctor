@@ -12,6 +12,7 @@ import { buildRows, deckStats, groupRows } from "./deckListModel";
 import ExportDecklistModal from "./ExportDecklistModal";
 import { buildDecklistText } from "./importExport";
 import { loadSettings, saveSettings } from "./listSettings";
+import { priceUsdOf } from "./printings";
 import "./deckview.css";
 
 // A card lookup that comes back short (Scryfall rate-limited) is tried again a few times, slowly.
@@ -96,7 +97,7 @@ export default function PublicDeckView() {
     );
   }
 
-  const priceFor = (name: string) => cardInfo[name]?.priceUsd ?? null;
+  const priceFor = (name: string) => priceUsdOf(deck.printings[name], cardInfo[name]?.priceUsd);
   const allCards = deck.commander ? [...deck.cards, deck.commander] : deck.cards;
   const totalPrice = allCards.reduce((sum, name) => sum + (parseFloat(priceFor(name) ?? "") || 0), 0);
   const cardCounts = new Map<string, number>();
@@ -121,7 +122,7 @@ export default function PublicDeckView() {
       <DeckHero
         commander={deck.commander}
         commanderId={deck.commander ? cardInfo[deck.commander]?.id : null}
-        printing={undefined}
+        printing={deck.commander ? deck.printings[deck.commander] : undefined}
         showCommander={!!deck.name}
         onOpenCommander={() => deck.commander && setModalCard(deck.commander)}
         showBack={false}
@@ -145,7 +146,7 @@ export default function PublicDeckView() {
           <DeckSidebar
             name={previewName}
             cardId={previewName ? cardInfo[previewName]?.id : undefined}
-            printing={undefined}
+            printing={previewName ? deck.printings[previewName] : undefined}
             priceUsd={previewName ? priceFor(previewName) : undefined}
             inDeck={!!previewName && (cardCounts.has(previewName) || previewName === deck.commander)}
             owned={false}
@@ -157,7 +158,7 @@ export default function PublicDeckView() {
               groups={groups}
               view={settings.view}
               options={settings}
-              printings={{}}
+              printings={deck.printings}
               owned={new Set()}
               onHover={(name) => setHoveredCard(name)}
               onOpen={(name) => setModalCard(name)}
@@ -172,7 +173,7 @@ export default function PublicDeckView() {
           name={modalCard}
           cardId={cardInfo[modalCard]?.id}
           info={cardInfo[modalCard]}
-          printing={undefined}
+          printing={deck.printings[modalCard]}
           isCommander={modalIsCommander}
           loadRulings={loadRulings}
           onNavigate={navigateModal}

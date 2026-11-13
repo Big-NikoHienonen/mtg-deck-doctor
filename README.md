@@ -13,7 +13,7 @@ The backend is FastAPI (Python, managed with uv). The front end is React and Typ
 - Deckbuilder: the list, grouped and sorted as you choose, with a card preview. Select a card, or the commander, to see its details, rulings, and printings, and to use it as a foil.
 - Insights: EDHREC's top includes for your commander, a health check, cut suggestions, and swaps.
 - Correspondence: a chat with the Doctor about the deck. The Doctor only suggests. It shows each card it wants to add or cut, or a commander it wants you to use, as a button under its reply, and nothing changes until you click it. The rules check every suggestion first: legality, color identity, the singleton rule, and the 99-card limit.
-- Import and export decklists, pick printings, and track which cards you own.
+- Import and export decklists, pick printings (kept with the deck, so visitors see them), and track which cards you own.
 - Public view: anyone can open a deck's address to look at the list, with no chat, insights, or editing. Sign in at the same address to edit. See [Sign in and public decks](#sign-in-and-public-decks).
 
 **Home** (`/`) is the landing page: new cards and new commanders from recent sets that are worth a look, with a link to every new card. **My decks** (`/decks`) lists your decks, and holds the swaps the Doctor has worked out. **Card search** (`/search`) searches Scryfall.
@@ -111,7 +111,7 @@ The backend is closed to everyone but you, except for a deck's list. With `MTG_D
 
 **Every deck's page is public to read.** Open `/decks/<id>` without signing in and you get the list, card details, rulings, stats and Export, and nothing else: no chat with the Doctor, no insights, no editing, no collection toggle, and no printing choices. Nothing a visitor can reach calls the model. Signed in, the same address is the whole deck page. The home page, search, your collection and Admin need the sign-in, so nobody can find a deck's address from the app. Send someone the address in your browser's address bar.
 
-These routes answer without a sign-in: `GET /public/decks/{id}`, `POST /public/decks/{id}/cards`, and `GET /public/decks/{id}/rulings`. The first returns the name, commander, colors, cards and last-updated date, and never the conversation or the keep list. The other two answer only for cards in that deck, so they can't be used to look up other cards through your server. A deck's id is 8 random hex characters, so an address can be guessed in principle. The printings you picked stay in your browser, so a viewer sees each card's default printing.
+These routes answer without a sign-in: `GET /public/decks/{id}`, `POST /public/decks/{id}/cards`, and `GET /public/decks/{id}/rulings`. The first returns the name, commander, colors, cards, the printings you picked and the last-updated date, and never the conversation or the keep list. The other two answer only for cards in that deck, so they can't be used to look up other cards through your server. A deck's id is 8 random hex characters, so an address can be guessed in principle. The printings you pick (and whether a card is a foil) are kept with the deck, so a visitor sees the same art and prices as you do.
 
 ## Test
 

@@ -17,6 +17,7 @@ import {
   renameDeck,
   sendMessage,
   setCommander,
+  setDeckPrintings,
   type CardInfo,
   type CommanderIncludes,
   type Deck,
@@ -44,13 +45,7 @@ import DeckMenu from "./DeckMenu";
 import ExportDecklistModal from "./ExportDecklistModal";
 import { buildDecklistText } from "./importExport";
 import ImportCardsModal from "./ImportCardsModal";
-import {
-  clearSelectedPrinting,
-  loadSelectedPrintings,
-  priceUsdOf,
-  saveSelectedPrinting,
-  type SelectedPrinting,
-} from "./printings";
+import { adoptLegacyPrintings, priceUsdOf, type SelectedPrinting } from "./printings";
 import Recommendations from "./Recommendations";
 import TopIncludes from "./TopIncludes";
 import { buttonStyle, eyebrowStyle, inputStyle } from "./styles";
@@ -67,11 +62,15 @@ const TAB_LABELS = { build: "Deck", insights: "Insights", chat: "Correspondence"
 // could play it, so missing one is a real signal rather than noise.
 const STAPLE_INCLUSION = 0.5;
 
+// What a deck with no picked printings has, as one object so it doesn't change on every render.
+const NO_PRINTINGS: Record<string, SelectedPrinting> = {};
+
 export default function DeckView() {
   const { deckId } = useParams<{ deckId: string }>();
   const navigate = useNavigate();
 
   const [deck, setDeck] = useState<Deck | null>(null);
+  const selectedPrintings = deck?.printings ?? NO_PRINTINGS;
   const [notFound, setNotFound] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -106,7 +105,6 @@ export default function DeckView() {
   // show their art without a lookup. Deck cards' ids come from cardInfo.
   const [hoverIds, setHoverIds] = useState<Record<string, string>>({});
   const [modalCard, setModalCard] = useState<string | null>(null);
-  const [selectedPrintings, setSelectedPrintings] = useState<Record<string, SelectedPrinting>>({});
   const [ownedCards, setOwnedCards] = useState<Set<string>>(new Set());
   const [unresolvedCount, setUnresolvedCount] = useState(0);
   // Scheduled auto-retry state for Scryfall lookup failures — see the
@@ -135,13 +133,15 @@ export default function DeckView() {
     if (!deckId) return;
     setDeck(null);
     setNotFound(false);
-    setSelectedPrintings(loadSelectedPrintings(deckId));
     setRetryAttempt(0);
     setNextRetryAt(null);
     getDeck(deckId)
       .then((found) => {
-        if (found) setDeck(found);
-        else setNotFound(true);
+        if (found) {
+          setDeck(found);
+          // Printings picked before they were kept with the deck move over, once.
+          adoptLegacyPrintings(found).then((adopted) => adopted !== found && setDeck(adopted));
+        } else setNotFound(true);
       })
       .catch(() => setError("Couldn't reach the Deck Doctor backend. Is it running on port 8000?"));
   }, [deckId]);
@@ -278,15 +278,27 @@ export default function DeckView() {
     if (!updatedDeck.cards.includes(name)) {
       setHoveredCard((prev) => (prev === name ? null : prev));
       setModalCard((prev) => (prev === name ? null : prev));
-      if (deckId) setSelectedPrintings(clearSelectedPrinting(deckId, name));
     }
   }
 
-  // Which printing's art to show is a per-viewer display preference (see
-  // printings.ts) — persisted in localStorage, never sent to the backend.
-  function handleChangePrinting(name: string, printing: SelectedPrinting) {
+  // Which printing's art to show is kept with the deck (see printings.ts), so visitors see it too. The
+  // page shows the choice at once and puts it back if it can't be saved.
+  async function handleChangePrinting(name: string, printing: SelectedPrinting) {
     if (!deckId) return;
-    setSelectedPrintings(saveSelectedPrinting(deckId, name, printing));
+    const previous = deck?.printings[name];
+    setDeck((prev) => prev && { ...prev, printings: { ...prev.printings, [name]: printing } });
+    try {
+      setDeck(await setDeckPrintings(deckId, { [name]: printing }));
+    } catch (err) {
+      setDeck((prev) => {
+        if (!prev) return prev;
+        const printings = { ...prev.printings };
+        if (previous) printings[name] = previous;
+        else delete printings[name];
+        return { ...prev, printings };
+      });
+      setError(err instanceof Error ? err.message : "Couldn't save that printing. Try again.");
+    }
   }
 
   // Ownership toggle — a real backend-persisted fact (unlike printing

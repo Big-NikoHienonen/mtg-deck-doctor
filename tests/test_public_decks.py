@@ -59,7 +59,7 @@ D.save_deck(deck)
 view = c.get("/public/decks/aaaa1111")
 body = view.json()
 check("a deck's address opens the list: name, commander, colors, cards", view.status_code == 200 and body["name"] == "Prosper treasure" and body["commander"] == "Prosper, Tome-Bound" and body["commander_color_identity"] == ["B", "R"] and body["cards"] == ["Sol Ring", "Mountain"], str(body))
-check("...and only those, with a date", set(body) == {"name", "commander", "commander_color_identity", "cards", "updated_at"}, str(sorted(body)))
+check("...and only those, with a date and the printings", set(body) == {"name", "commander", "commander_color_identity", "cards", "printings", "updated_at"}, str(sorted(body)))
 check("...so not its conversation, its keep list, or its version", SECRET_CHAT not in view.text and "keep" not in body and "version" not in body and "messages" not in body)
 version = D.load_deck("aaaa1111").version
 updated = D.load_deck("aaaa1111").updated_at
@@ -93,6 +93,61 @@ check("...and is in the list", any(d.id == "bbbb2222" for d in D.list_decks()) a
 D.rename_deck(loaded, "Renamed")
 check("...and its next save drops the key", "share_token" not in json.loads((D.DECKS_DIR / "bbbb2222.json").read_text()))
 check("a copy of a deck is as public as any other", c.get(f"/public/decks/{c.post('/decks/aaaa1111/duplicate').json()['id']}").status_code == 200)
+
+# --- printings ----------------------------------------------------------------------------------------------------------
+
+LANDS = {"id": "11111111-2222-3333-4444-555555555555", "setName": "Kamigawa: Neon Dynasty", "priceUsd": "0.25", "priceUsdFoil": None, "finishes": ["nonfoil", "foil"], "foil": False}
+check("a deck has no printings until the owner picks one", c.get("/decks/aaaa1111").json()["printings"] == {} and c.get("/public/decks/aaaa1111").json()["printings"] == {})
+fingerprint = D.deck_fingerprint(D.load_deck("aaaa1111"))
+res = c.post("/decks/aaaa1111/printings", json={"printings": {"Mountain": LANDS}})
+check("the owner picks a printing for a card in the deck", res.status_code == 200 and res.json()["printings"]["Mountain"]["setName"] == "Kamigawa: Neon Dynasty", str(res.json()["printings"]))
+check("...and it is kept with the deck", D.load_deck("aaaa1111").printings["Mountain"]["id"] == LANDS["id"])
+seen = c.get("/public/decks/aaaa1111").json()["printings"]
+check("...and a visitor sees the same printing", seen == {"Mountain": LANDS}, str(seen))
+check("...which doesn't change what the deck is, for the Doctor's saved results", D.deck_fingerprint(D.load_deck("aaaa1111")) == fingerprint)
+
+version = D.load_deck("aaaa1111").version
+c.post("/decks/aaaa1111/printings", json={"printings": {"Mountain": LANDS}})
+check("picking what is already picked saves nothing", D.load_deck("aaaa1111").version == version)
+
+res = c.post("/decks/aaaa1111/printings", json={"printings": {"Counterspell": LANDS}})
+check("a card that isn't in the deck can't get one", res.status_code == 400 and "Counterspell" not in D.load_deck("aaaa1111").printings)
+res = c.post("/decks/aaaa1111/printings", json={"printings": {"Prosper, Tome-Bound": LANDS | {"id": "99999999-aaaa-bbbb-cccc-dddddddddddd"}, "Sol Ring": LANDS | {"foil": True}}})
+check("the commander can, and several cards go in one request", res.status_code == 200 and set(res.json()["printings"]) == {"Mountain", "Prosper, Tome-Bound", "Sol Ring"})
+check("...and a visitor sees all of them", set(c.get("/public/decks/aaaa1111").json()["printings"]) == {"Mountain", "Prosper, Tome-Bound", "Sol Ring"})
+
+res = c.post("/decks/aaaa1111/printings", json={"printings": {"Mountain": LANDS | {"evil": "<script>alert(1)</script>", "setName": "Fine"}}})
+check("a field the page doesn't know is dropped, not kept", res.status_code == 200 and "evil" not in res.json()["printings"]["Mountain"] and "script" not in c.get("/public/decks/aaaa1111").text)
+junk = [
+    {"Mountain": LANDS | {"id": "../../etc/passwd"}},
+    {"Mountain": LANDS | {"id": "x"}},
+    {"Mountain": LANDS | {"foil": "yes"}},
+    {"Mountain": LANDS | {"setName": "x" * 500}},
+    {"Mountain": LANDS | {"finishes": ["foil"] * 20}},
+    {"Mountain": "not an object"},
+    {f"Card {i}": None for i in range(501)},
+]
+check("anything that isn't a printing is refused", all(c.post("/decks/aaaa1111/printings", json={"printings": j}).status_code == 422 for j in junk), str([c.post("/decks/aaaa1111/printings", json={"printings": j}).status_code for j in junk]))
+check("...and the stored printings are as they were", D.load_deck("aaaa1111").printings["Mountain"]["setName"] == "Fine")
+
+c.post("/decks/aaaa1111/printings", json={"printings": {"Mountain": LANDS}})
+copy_id = c.post("/decks/aaaa1111/duplicate").json()["id"]
+check("a copy of the deck keeps its printings", c.get(f"/public/decks/{copy_id}").json()["printings"]["Mountain"]["id"] == LANDS["id"])
+c.post(f"/decks/{copy_id}/printings", json={"printings": {"Mountain": None}})
+check("...and changing the copy leaves the original alone", "Mountain" not in D.load_deck(copy_id).printings and "Mountain" in D.load_deck("aaaa1111").printings)
+
+res = c.post("/decks/aaaa1111/printings", json={"printings": {"Sol Ring": None, "Not There": None}})
+check("a null clears a card's printing, and clearing one that isn't set is fine", res.status_code == 200 and "Sol Ring" not in res.json()["printings"])
+check("...and a visitor stops seeing it", "Sol Ring" not in c.get("/public/decks/aaaa1111").json()["printings"])
+gone = D.load_deck("aaaa1111")
+gone.cards.remove("Mountain")
+D.save_deck(gone)
+check("a printing for a card that has left the deck isn't shown to visitors", "Mountain" not in c.get("/public/decks/aaaa1111").json()["printings"])
+gone = D.load_deck("aaaa1111")
+gone.cards.append("Mountain")
+D.save_deck(gone)
+check("...and comes back if the card does", "Mountain" in c.get("/public/decks/aaaa1111").json()["printings"])
+check("a printing for a deck that doesn't exist is a 404", c.post("/decks/deadbeef/printings", json={"printings": {"Mountain": LANDS}}).status_code == 404)
 
 # --- card details, for the cards in the deck only ---------------------------------------------------------------------
 

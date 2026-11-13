@@ -7,6 +7,7 @@ import {
   getCardInfo,
   getCollection,
   listDecks,
+  setDeckPrintings,
   removeCard,
   removeFromCollection,
   scryfallSearchCards,
@@ -19,7 +20,7 @@ import {
 } from "./api";
 import CardModal from "./CardModal";
 import CardImage from "./CardImage";
-import { loadSelectedPrintings, saveSelectedPrinting, type SelectedPrinting } from "./printings";
+import { adoptLegacyPrintings, type SelectedPrinting } from "./printings";
 import { isAddableToDeck } from "./searchQuery";
 import { buttonStyle, eyebrowStyle, inputStyle } from "./styles";
 
@@ -77,7 +78,6 @@ export default function CardSearchResultsPage() {
 
   const [decks, setDecks] = useState<Deck[]>([]);
   const [modalDeckId, setModalDeckId] = useState(deckId);
-  const [selectedPrintings, setSelectedPrintings] = useState<Record<string, SelectedPrinting>>({});
   const [ownedCards, setOwnedCards] = useState<Set<string>>(new Set());
   const [collectionLoaded, setCollectionLoaded] = useState(false);
   const [cards, setCards] = useState<SearchCard[] | null>(null);
@@ -90,7 +90,10 @@ export default function CardSearchResultsPage() {
   const [openInfo, setOpenInfo] = useState<CardInfo | undefined>(undefined);
 
   useEffect(() => {
-    listDecks().then(setDecks);
+    // Printings picked before they were kept with the deck move over, once.
+    listDecks()
+      .then((found) => Promise.all(found.map(adoptLegacyPrintings)))
+      .then(setDecks);
     getCollection()
       .then((names) => setOwnedCards(new Set(names)))
       .catch(() => {
@@ -99,16 +102,12 @@ export default function CardSearchResultsPage() {
       .finally(() => setCollectionLoaded(true));
   }, []);
 
-  // Which deck's saved printing choices apply to the currently-open modal
-  // — follows modalDeckId (the modal's own deck-picker), not the page's
-  // fixed `deckId`, so switching decks inside an open modal picks up that
-  // deck's real choices instead of stale ones.
-  useEffect(() => {
-    setSelectedPrintings(modalDeckId ? loadSelectedPrintings(modalDeckId) : {});
-  }, [modalDeckId]);
-
   const deck = decks.find((d) => d.id === deckId) ?? null;
   const modalDeck = decks.find((d) => d.id === modalDeckId) ?? null;
+  // The printing choices of the currently-open modal's deck: they follow modalDeckId (the modal's own
+  // deck-picker), not the page's fixed `deckId`, so switching decks inside an open modal shows that
+  // deck's real choices.
+  const selectedPrintings: Record<string, SelectedPrinting> = modalDeck?.printings ?? {};
 
   // "Only my collection": fetch the complete owned∩query intersection up
   // front (one Scryfall request per chunk of the collection — see
@@ -246,9 +245,9 @@ export default function CardSearchResultsPage() {
     updateDeck(updated);
   }
 
-  function handleChangePrinting(printing: SelectedPrinting) {
+  async function handleChangePrinting(printing: SelectedPrinting) {
     if (!modalDeckId || !openCard) return;
-    setSelectedPrintings(saveSelectedPrinting(modalDeckId, openCard.name, printing));
+    updateDeck(await setDeckPrintings(modalDeckId, { [openCard.name]: printing }));
   }
 
   async function handleToggleOwned() {

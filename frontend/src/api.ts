@@ -1,4 +1,5 @@
 import { clearAiProblem, reportAiProblem } from "./aiStatus";
+import type { SelectedPrinting } from "./printings";
 
 // The backend is on the page's own address under /api: in production the backend serves the page too
 // (server.py), and in development Vite sends /api to the backend on port 8000 (vite.config.ts).
@@ -69,6 +70,8 @@ export type Deck = {
   // Cards the owner marked as keepers — never offered as cut candidates.
   keep: string[];
   messages: Message[];
+  // The printing used for each card, by card name (see printings.ts). Visitors see these too.
+  printings: Record<string, SelectedPrinting>;
   updated_at: string;
   // Counts saves; the backend refuses to save over a version it hasn't seen.
   version: number;
@@ -122,6 +125,18 @@ export async function getDeck(id: string): Promise<Deck | null> {
   return res.json();
 }
 
+// Sets the printing used for each named card, or clears it where the value is null. The choices are kept
+// with the deck, so anyone who opens its page sees the same printings.
+export async function setDeckPrintings(id: string, printings: Record<string, SelectedPrinting | null>): Promise<Deck> {
+  const res = await safeFetch(`${API_BASE}/decks/${id}/printings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ printings }),
+  });
+  if (!res || !res.ok) throw new Error("Couldn't save that printing. Try again.");
+  return res.json();
+}
+
 // What anyone can see of a deck without signing in: the list, and nothing that could change the deck
 // or use the Doctor on it.
 export type PublicDeck = {
@@ -129,6 +144,7 @@ export type PublicDeck = {
   commander: string | null;
   commander_color_identity: string[];
   cards: string[];
+  printings: Record<string, SelectedPrinting>;
   updated_at: string;
 };
 

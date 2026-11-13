@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 import anthropic
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool
 
 from mtg_deck_doctor.card_cache import get_card_info, get_card_info_batch, peek_card_info
 from mtg_deck_doctor.card_details import get_printings, get_rulings
@@ -37,6 +37,7 @@ from mtg_deck_doctor.deck import (
     rename_deck,
     save_ai_result,
     save_messages,
+    set_printings,
     unkeep_card,
 )
 from mtg_deck_doctor import ai_errors, auth, game_changers, usage
@@ -285,6 +286,18 @@ def duplicate_deck_endpoint(deck_id: str) -> Deck:
     return copy
 
 
+class PrintingChoice(BaseModel):
+    """One card's printing, as the page keeps it (frontend/src/printings.ts). The shape is checked on
+    the way in, because a visitor's page draws these."""
+
+    id: str = Field(pattern=r"^[0-9A-Za-z-]{8,40}$")
+    setName: str = Field(default="", max_length=120)
+    priceUsd: str | None = Field(default=None, max_length=20)
+    priceUsdFoil: str | None = Field(default=None, max_length=20)
+    finishes: list[str] | None = Field(default=None, max_length=8)
+    foil: StrictBool = False
+
+
 class PublicDeck(BaseModel):
     """What anyone can see of a deck without signing in: the list, and nothing that could be used to
     change the deck or to use the Doctor on it. Not its conversation or its keep list. A model, not the
@@ -294,6 +307,8 @@ class PublicDeck(BaseModel):
     commander: str | None
     commander_color_identity: list[str]
     cards: list[str]
+    # The owner's printing for each card in the deck, so a basic land shows the art it was given.
+    printings: dict[str, PrintingChoice]
     updated_at: str
 
 
@@ -315,6 +330,11 @@ def get_public_deck_endpoint(deck_id: str) -> PublicDeck:
         commander=deck.commander,
         commander_color_identity=deck.commander_color_identity,
         cards=deck.cards,
+        printings={
+            name: PrintingChoice(**choice)
+            for name, choice in deck.printings.items()
+            if name in deck.cards or name == deck.commander
+        },
         updated_at=deck.updated_at,
     )
 
@@ -418,6 +438,23 @@ def remove_card_endpoint(deck_id: str, name: str) -> Deck:
 def swap_card_endpoint(deck_id: str, request: SwapRequest) -> Deck:
     deck = _get_deck_or_404(deck_id)
     _raise_if_error(swap_card(deck, request.remove, request.add))
+    return deck
+
+
+class PrintingsRequest(BaseModel):
+    # Card name to printing; None clears a card's choice.
+    printings: dict[str, PrintingChoice | None] = Field(max_length=500)
+
+
+@app.post("/decks/{deck_id}/printings")
+def set_printings_endpoint(deck_id: str, request: PrintingsRequest) -> Deck:
+    deck = _get_deck_or_404(deck_id)
+    # Stored as the page keeps it: the fields it was given, with priceUsd always there (null if unknown).
+    changes = {
+        name: None if choice is None else {**choice.model_dump(exclude_none=True), "priceUsd": choice.priceUsd}
+        for name, choice in request.printings.items()
+    }
+    _raise_if_error(set_printings(deck, changes))
     return deck
 
 
