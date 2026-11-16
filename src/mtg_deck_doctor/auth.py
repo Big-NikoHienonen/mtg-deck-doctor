@@ -238,3 +238,7 @@ throttle = AttemptLimiter(MAX_FAILURES, FAILURE_WINDOW_SECONDS, overall=MAX_FAIL
 # misses in ten minutes is already unusual.
 MAX_DECK_MISSES = 20
 deck_misses = AttemptLimiter(MAX_DECK_MISSES, FAILURE_WINDOW_SECONDS, overall=None)
+
+# Requests for the browse page's list, which anyone can make. Real browsing is a few a minute.
+MAX_BROWSE_PER_MINUTE = 120
+browse_limiter = AttemptLimiter(MAX_BROWSE_PER_MINUTE, 60, overall=None)

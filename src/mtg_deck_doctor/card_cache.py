@@ -21,6 +21,7 @@ import os
 import threading
 import time
 import unicodedata
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -176,6 +177,18 @@ def peek_card_info(name: str) -> dict | None:
     to stored suggestions) without being able to afford, or wanting to
     wait on, a throttled Scryfall fetch."""
     return _valid_cached_info(_load_cache().get(name))
+
+
+def peek_card_info_many(names: Iterable[str]) -> dict[str, dict]:
+    """`peek_card_info` for many names at once, reading the cache file once instead of once per name.
+    Only the names that have usable cached data are in the answer."""
+    cache = _load_cache()
+    found = {}
+    for name in names:
+        info = _valid_cached_info(cache.get(name))
+        if info is not None:
+            found[name] = info
+    return found
 
 
 def get_card_info(name: str, refresh: bool = False) -> dict | None:

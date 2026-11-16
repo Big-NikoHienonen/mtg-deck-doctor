@@ -18,10 +18,11 @@ import "./deckview.css";
 // A card lookup that comes back short (Scryfall rate-limited) is tried again a few times, slowly.
 const RETRY_DELAYS_MS = [30_000, 90_000, 180_000];
 
-// A deck's page for someone who isn't signed in, who got here from a link its owner sent: the deck to
-// look at, and a card's details on a click. Nothing changes the deck, and nothing here calls the model.
-// It only asks the backend for the list and for data on the cards in it, through routes that need no
-// sign-in. Once the owner signs in (from the app bar), the same address shows the whole deck page.
+// A public deck's page for anyone who isn't its owner, signed in or not: the deck to look at, who built it,
+// and a card's details on a click. Nothing changes the deck, and nothing here calls the model. It only asks
+// the backend for the list and for data on the cards in it, through routes that need no sign-in. A private
+// deck, or one that isn't there, is "no deck at this address". Once the owner signs in (from the app bar),
+// the same address shows the whole deck page.
 export default function PublicDeckView() {
   const { deckId } = useParams<{ deckId: string }>();
   const [deck, setDeck] = useState<PublicDeck | null>(null);
@@ -125,7 +126,8 @@ export default function PublicDeckView() {
         printing={deck.commander ? deck.printings[deck.commander] : undefined}
         showCommander={!!deck.name}
         onOpenCommander={() => deck.commander && setModalCard(deck.commander)}
-        showBack={false}
+        backTo={{ to: "/browse", label: "← BROWSE DECKS" }}
+        byline={deck.owner_name}
         title={<h1 className="dv-title">{title}</h1>}
         colorIdentity={deck.commander_color_identity}
         cardCount={allCards.length}

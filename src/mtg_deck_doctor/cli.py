@@ -1,6 +1,7 @@
 """Account commands, run on the machine that holds the data (see users.py for why there is no sign-up).
 
-    mtg-deck-doctor create-user EMAIL       make an account; the first one takes the decks that have no owner here
+    mtg-deck-doctor create-user EMAIL       make an account (--username NAME); the first one takes the decks that have no owner here
+    mtg-deck-doctor set-username EMAIL NAME give an account a username, or a new one
     mtg-deck-doctor set-password EMAIL      a new password, which signs the user out everywhere
     mtg-deck-doctor revoke-sessions EMAIL   sign the user out everywhere, keeping the password
     mtg-deck-doctor claim-decks EMAIL       give every deck that has no owner here to this account
@@ -72,13 +73,22 @@ def _user_or_exit(email: str) -> users.User:
 def _create_user(args: argparse.Namespace) -> None:
     first = not users.any_users()
     try:
-        user = users.create_user(args.email, _read_password(args.password_stdin))
+        user = users.create_user(args.email, _read_password(args.password_stdin), args.username)
     except ValueError as err:
         raise SystemExit(str(err))
     print(f"Made the account for {user.email}.")
     if first:
         count = claim_unowned_decks(user.id, _account_ids())
         print("1 existing deck now belongs to it." if count == 1 else f"{count} existing decks now belong to it.")
+
+
+def _set_username(args: argparse.Namespace) -> None:
+    user = _user_or_exit(args.email)
+    try:
+        user = users.set_username(user, args.username)
+    except ValueError as err:
+        raise SystemExit(str(err))
+    print(f"{user.email} is now {user.username}.")
 
 
 def _set_password(args: argparse.Namespace) -> None:
@@ -107,7 +117,7 @@ def _list_users(_: argparse.Namespace) -> None:
     if not accounts:
         print("No accounts.")
     for user in accounts:
-        print(f"{user.email}  made {user.created_at[:10]}  last signed in {user.last_login_at[:10] if user.last_login_at else 'never'}")
+        print(f"{user.email}  {user.username or '(no username)'}  made {user.created_at[:10]}  last signed in {user.last_login_at[:10] if user.last_login_at else 'never'}")
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -127,7 +137,13 @@ def main(argv: list[str] | None = None) -> None:
         command.add_argument("email")
         if name in ("create-user", "set-password"):
             command.add_argument("--password-stdin", action="store_true", help="read the password from standard input")
+        if name == "create-user":
+            command.add_argument("--username", help="what other people see of this user, on the decks they make public")
         command.set_defaults(handler=handler)
+    set_username = commands.add_parser("set-username", help="give an account a username, or a new one")
+    set_username.add_argument("email")
+    set_username.add_argument("username")
+    set_username.set_defaults(handler=_set_username)
     commands.add_parser("list-users", help="list the accounts").set_defaults(handler=_list_users)
 
     args = parser.parse_args(argv)

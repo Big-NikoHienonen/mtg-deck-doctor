@@ -68,3 +68,20 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* The way from the front door to the decks people have made public. */
+.guest-browse {
+  display: inline-block;
+  padding: 10px 22px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.guest-browse:hover,
+.guest-browse:focus-visible {
+  filter: brightness(1.1);
+}

@@ -60,7 +60,7 @@ D.save_deck(deck)
 view = c.get("/public/decks/aaaa1111")
 body = view.json()
 check("a deck's address opens the list: name, commander, colors, cards", view.status_code == 200 and body["name"] == "Prosper treasure" and body["commander"] == "Prosper, Tome-Bound" and body["commander_color_identity"] == ["B", "R"] and body["cards"] == ["Sol Ring", "Mountain"], str(body))
-check("...and only those, with a date and the printings", set(body) == {"name", "commander", "commander_color_identity", "cards", "printings", "updated_at"}, str(sorted(body)))
+check("...and only those, with a date and the printings", set(body) == {"name", "commander", "commander_color_identity", "cards", "printings", "owner_name", "updated_at"}, str(sorted(body)))
 check("...so not its conversation, its keep list, or its version", SECRET_CHAT not in view.text and "keep" not in body and "version" not in body and "messages" not in body)
 version = D.load_deck("aaaa1111").version
 updated = D.load_deck("aaaa1111").updated_at
@@ -153,9 +153,9 @@ check("a printing for a deck that doesn't exist is a 404", c.post("/decks/deadbe
 # --- card details, for the cards in the deck only ---------------------------------------------------------------------
 
 asked: list[list[str]] = []
-real = (api.get_card_info_batch, api.peek_card_info, api.get_rulings)
+real = (api.get_card_info_batch, api.peek_card_info_many, api.get_rulings)
 api.get_card_info_batch = lambda names, refresh=False: asked.append(list(names)) or {"info": {n: {"id": f"id-{n}"} for n in names}, "not_found": [], "failed": []}
-api.peek_card_info = lambda name: {"id": f"id-{name}"} if name in ("Sol Ring", "Mountain", "Blood Artist", "Prosper, Tome-Bound", "Counterspell") else None
+api.peek_card_info_many = lambda names: {name: {"id": f"id-{name}"} for name in names if name in ("Sol Ring", "Mountain", "Blood Artist", "Prosper, Tome-Bound", "Counterspell")}
 api.get_rulings = lambda card_id: [{"comment": f"ruling for {card_id}"}]
 
 res = c.post("/public/decks/aaaa1111/cards", json={"names": ["Sol Ring", "Counterspell", "Prosper, Tome-Bound"], "refresh": True})
@@ -167,7 +167,7 @@ res = c.get("/public/decks/aaaa1111/rulings", params={"id": "id-Sol Ring"})
 check("a stranger gets rulings for a card in the deck", res.status_code == 200 and res.json() == {"rulings": [{"comment": "ruling for id-Sol Ring"}]}, str(res.json()))
 check("...but not for one that isn't", c.get("/public/decks/aaaa1111/rulings", params={"id": "id-Counterspell"}).status_code == 404)
 check("...nor for a deck that doesn't exist", c.get("/public/decks/deadbeef/rulings", params={"id": "id-Sol Ring"}).status_code == 404)
-api.get_card_info_batch, api.peek_card_info, api.get_rulings = real
+api.get_card_info_batch, api.peek_card_info_many, api.get_rulings = real
 
 check("none of that called the model", not model_calls, str(model_calls))
 

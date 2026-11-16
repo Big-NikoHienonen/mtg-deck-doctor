@@ -1,4 +1,6 @@
-"""The accounts: one JSON file per user under data/users, with a salted scrypt hash of the password.
+"""The accounts: one JSON file per user under data/users, with a salted scrypt hash of the password and a
+username. The username is what other people see of a user, on the decks they have made public. The
+email is never shown to anyone but its owner.
 
 There is no sign-up. An account is made on the server's command line (see cli.py). The password is
 never stored. What is stored is a scrypt hash with its own salt and its cost settings, so the cost can be
@@ -22,6 +24,8 @@ from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime, timezone
 from pathlib import Path
 
+from mtg_deck_doctor import moderation
+
 USERS_DIR = Path("data/users")
 
 # scrypt cost. N=2**15, r=8, p=3 is one of the equal-strength settings OWASP lists for scrypt. It needs
@@ -39,6 +43,14 @@ MAX_EMAIL_LENGTH = 254
 EMAIL_PATTERN = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
 USER_ID_PATTERN = re.compile(r"[0-9a-f]{16}")
 
+# A username: 3 to 24 letters, digits, hyphens and underscores, starting with a letter or digit. It shows
+# beside a deck on a public page, so it has to pass the profanity check, and it can't pass for the site.
+USERNAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{2,23}")
+RESERVED_USERNAMES = frozenset(
+    "admin administrator root system support help staff mod moderator official owner anonymous unknown null "
+    "undefined everyone nobody mtgdeckdoctor deckdoctor doctor".split()
+)
+
 _lock = threading.Lock()
 
 
@@ -55,6 +67,9 @@ class User:
     session_version: int = 0
     created_at: str = field(default_factory=_now)
     last_login_at: str | None = None
+    # What other people see of this user. None until the user picks one, and until then the decks they
+    # have made public are shown without a name.
+    username: str | None = None
 
 
 # ---- passwords ---------------------------------------------------------------------------------------
@@ -132,6 +147,15 @@ def check_password(password: str, email: str) -> str | None:
     return None
 
 
+def check_username(username: str) -> str | None:
+    """Why this can't be a username, or None. Says nothing about whether someone has it already."""
+    if not USERNAME_PATTERN.fullmatch(username):
+        return "A username is 3 to 24 characters: letters, numbers, hyphens and underscores."
+    if username.lower() in RESERVED_USERNAMES or moderation.is_blocked(username):
+        return "That username isn't allowed."
+    return None
+
+
 # ---- the files ---------------------------------------------------------------------------------------
 
 
@@ -184,19 +208,50 @@ def find_user(email: str) -> User | None:
     return next((user for user in list_users() if user.email == email), None)
 
 
-def create_user(email: str, password: str) -> User:
-    """Makes an account. Raises ValueError, with something to show a person, if the email or the
-    password won't do or the email already has an account."""
+def find_by_username(username: str) -> User | None:
+    wanted = username.strip().lower()
+    return next((user for user in list_users() if user.username and user.username.lower() == wanted), None)
+
+
+def usernames() -> dict[str, str]:
+    """Every user's id and username, for the pages that show who built a deck. Users without a username
+    are left out."""
+    return {user.id: user.username for user in list_users() if user.username}
+
+
+def create_user(email: str, password: str, username: str | None = None) -> User:
+    """Makes an account. Raises ValueError, with something to show a person, if the email, the password
+    or the username won't do, or the email or the username is taken."""
     email = normalize_email(email)
-    problem = check_email(email) or check_password(password, email)
+    username = username.strip() if username else None
+    problem = check_email(email) or check_password(password, email) or (check_username(username) if username else None)
     if problem:
         raise ValueError(problem)
     with _lock:
         if find_user(email) is not None:
             raise ValueError("There is already an account with that email.")
-        user = User(email=email, password_hash=hash_password(password))
+        if username and find_by_username(username) is not None:
+            raise ValueError("That username is taken.")
+        user = User(email=email, password_hash=hash_password(password), username=username)
         _write(user)
         return user
+
+
+def set_username(user: User, username: str) -> User:
+    """Gives the user a username, or a new one. Raises ValueError, with something to show a person, if it
+    won't do or someone else has it. The same user may change the case of their own."""
+    username = username.strip()
+    problem = check_username(username)
+    if problem:
+        raise ValueError(problem)
+    with _lock:
+        holder = find_by_username(username)
+        if holder is not None and holder.id != user.id:
+            raise ValueError("That username is taken.")
+        current = get_user(user.id) or user
+        current.username = username
+        _write(current)
+        return current
 
 
 def set_password(user: User, password: str) -> User:

@@ -48,6 +48,10 @@ class Deck:
     # owner has no account on this machine, such as decks copied from another one. While the app runs open
     # with no account, every deck is visible and new ones get none.
     owner_id: str | None = None
+    # Whether anyone can find this deck on the browse page and open it without signing in. A private deck
+    # is the owner's alone: every public route answers 404 for it. Decks made before this field existed
+    # read as public.
+    public: bool = True
     updated_at: str = field(default_factory=_now)
     # Counts saves. save_deck only writes over the version it was loaded at,
     # so a copy that's gone stale can't silently overwrite newer changes.
@@ -76,8 +80,8 @@ def _deck_from_json(text: str) -> Deck:
     return Deck(**{key: value for key, value in json.loads(text).items() if key in known})
 
 
-def create_deck(owner_id: str | None = None) -> Deck:
-    deck = Deck(owner_id=owner_id)
+def create_deck(owner_id: str | None = None, public: bool = True) -> Deck:
+    deck = Deck(owner_id=owner_id, public=public)
     save_deck(deck)
     return deck
 
@@ -100,6 +104,21 @@ def list_decks() -> list[Deck]:
 class DeckConflictError(Exception):
     """A save was refused because the deck on disk is not the version the
     caller loaded — someone else saved it in between, or deleted it."""
+
+
+# Goes up on every change this process makes to any deck, so a cache built from the decks (the browse
+# page's list) can tell when it is out of date. A change made by another process, such as the command
+# line, is not seen here, which is why such a cache also expires on a timer.
+_changes = 0
+
+
+def changes() -> int:
+    return _changes
+
+
+def _note_change() -> None:
+    global _changes
+    _changes += 1
 
 
 # Held only for the compare-and-write inside save_deck, never across a slow
@@ -137,6 +156,7 @@ def save_deck(deck: Deck) -> None:
         tmp = _path(deck.id).with_suffix(".json.tmp")
         tmp.write_text(json.dumps(data, indent=2))
         os.replace(tmp, _path(deck.id))
+        _note_change()
         deck.version = data["version"]
         deck.updated_at = data["updated_at"]
 
@@ -209,6 +229,7 @@ def duplicate_deck(deck_id: str) -> Deck | None:
         keep=list(original.keep),
         printings={name: dict(choice) for name, choice in original.printings.items()},
         owner_id=original.owner_id,
+        public=original.public,
     )
     save_deck(copy)
     return copy
@@ -235,6 +256,8 @@ def claim_unowned_decks(owner_id: str, accounts: Collection[str] | None = None) 
             tmp.write_text(json.dumps(data, indent=2))
             os.replace(tmp, path)
             claimed += 1
+    if claimed:
+        _note_change()
     return claimed
 
 
@@ -245,6 +268,7 @@ def delete_deck(deck_id: str) -> bool:
     if not path.exists():
         return False
     path.unlink()
+    _note_change()
     for kind in AI_RESULT_DIRS:
         _ai_result_path(kind, deck_id).unlink(missing_ok=True)
     return True
@@ -304,6 +328,13 @@ def save_ai_result(kind: str, deck: Deck, items: list[dict], **extra) -> dict:
 @retry_on_conflict
 def rename_deck(deck: Deck, name: str) -> Deck:
     deck.name = name.strip() or None
+    save_deck(deck)
+    return deck
+
+
+@retry_on_conflict
+def set_visibility(deck: Deck, public: bool) -> Deck:
+    deck.public = public
     save_deck(deck)
     return deck
 

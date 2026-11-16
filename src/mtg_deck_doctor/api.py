@@ -9,14 +9,15 @@ import threading
 import time
 from dataclasses import replace
 from datetime import datetime, timezone
+from typing import Literal
 
 import anthropic
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, StrictBool
 
-from mtg_deck_doctor.card_cache import get_card_info, get_card_info_batch, peek_card_info
+from mtg_deck_doctor.card_cache import get_card_info, get_card_info_batch, peek_card_info, peek_card_info_many
 from mtg_deck_doctor.card_details import get_printings, get_rulings, is_scryfall_id
 from mtg_deck_doctor.collection import (
     add_many_to_collection,
@@ -28,6 +29,7 @@ from mtg_deck_doctor.deck import (
     Deck,
     DECK_ID_PATTERN,
     DeckConflictError,
+    changes as deck_changes,
     create_deck,
     deck_fingerprint,
     delete_deck,
@@ -40,9 +42,10 @@ from mtg_deck_doctor.deck import (
     save_ai_result,
     save_messages,
     set_printings,
+    set_visibility,
     unkeep_card,
 )
-from mtg_deck_doctor import ai_errors, auth, game_changers, usage, users
+from mtg_deck_doctor import ai_errors, auth, game_changers, moderation, usage, users
 from mtg_deck_doctor.auth import public
 from mtg_deck_doctor.hardening import BodyLimitMiddleware
 from mtg_deck_doctor.edhrec import get_commander_includes, peek_commander_includes
@@ -272,6 +275,17 @@ def _generate(generate) -> list[dict]:
 class NewDeckRequest(BaseModel):
     name: str = Field(default="", max_length=100)
     commander: str = Field(default="", max_length=200)
+    public: StrictBool = True
+
+
+NAME_REFUSED = "That name isn't allowed. Try another."
+
+
+def _refuse_profanity(name: str) -> None:
+    """Deck names show on the browse page, so they pass the same check as usernames. The message doesn't
+    say which word it was."""
+    if moderation.is_blocked(name):
+        raise HTTPException(status_code=400, detail=NAME_REFUSED)
 
 
 @app.post("/decks")
@@ -279,7 +293,9 @@ def create_deck_endpoint(request: NewDeckRequest | None = None) -> Deck:
     """A new deck, optionally named and with its commander already set. A commander that can't lead
     is a 400 and leaves no deck behind."""
     user = auth.current_user.get()
-    deck = create_deck(owner_id=user.id if user else None)
+    if request:
+        _refuse_profanity(request.name)
+    deck = create_deck(owner_id=user.id if user else None, public=request.public if request else True)
     try:
         if request and request.commander.strip():
             _raise_if_error(set_commander(deck, request.commander.strip()))
@@ -343,7 +359,20 @@ class PublicDeck(BaseModel):
     cards: list[str]
     # The owner's printing for each card in the deck, so a basic land shows the art it was given.
     printings: dict[str, PrintingChoice]
+    # The builder's username, or None if they haven't picked one. Never their email.
+    owner_name: str | None
     updated_at: str
+
+
+def _public_name(deck: Deck) -> str | None:
+    """The deck's name for a stranger. A name that wouldn't pass today's profanity check (it was saved
+    before the check, or the list has grown since) is left out, and the page shows the commander instead."""
+    return deck.name if deck.name and not moderation.is_blocked(deck.name) else None
+
+
+def _owner_name(owner_id: str | None, names: dict[str, str]) -> str | None:
+    name = names.get(owner_id) if owner_id else None
+    return name if name and not moderation.is_blocked(name) else None
 
 
 def _public_deck_or_404(deck_id: str, request: Request) -> Deck:
@@ -354,7 +383,7 @@ def _public_deck_or_404(deck_id: str, request: Request) -> Deck:
     if wait:
         raise HTTPException(status_code=429, detail="Too many addresses with no deck. Try again later.", headers={"Retry-After": str(wait)})
     deck = DECK_ID_PATTERN.fullmatch(deck_id) and load_deck(deck_id)
-    if not deck:
+    if not deck or not deck.public:  # A private deck looks the same as no deck.
         auth.deck_misses.record(client)
         raise HTTPException(status_code=404, detail="There's no deck at this address.")
     return deck
@@ -362,12 +391,111 @@ def _public_deck_or_404(deck_id: str, request: Request) -> Deck:
 
 # A deck's page is open to look at: its address is the link. These routes answer for anyone, and only
 # ever with the list and with data on the cards in it. Everything else about a deck needs the sign-in.
+class PublicDeckSummary(BaseModel):
+    """One deck on the browse page."""
+
+    id: str
+    title: str
+    commander: str
+    # The commander's Scryfall id, for its art. None until the card has been looked up once.
+    commander_id: str | None
+    color_identity: list[str]
+    card_count: int
+    price_usd: float
+    owner_name: str | None
+    updated_at: str
+
+
+class PublicDeckList(BaseModel):
+    decks: list[PublicDeckSummary]
+    # How many decks match, before the page was cut out of them.
+    total: int
+
+
+# What the browse page lists, built from every deck and reused for a few seconds, because anyone can ask
+# for it and each ask would otherwise read every deck file. It is rebuilt at once when a deck changes in
+# this process (so a deck made private disappears from it straight away), and on a timer for changes made
+# by anything else.
+_INDEX_SECONDS = 5.0
+_index_lock = threading.Lock()
+_index: tuple[int, float, list[dict]] | None = None
+
+
+def _public_index() -> list[dict]:
+    """The public decks that have a commander, newest first. A deck with no commander isn't a build yet."""
+    global _index
+    with _index_lock:
+        now = time.monotonic()
+        if _index is not None and _index[0] == deck_changes() and now - _index[1] < _INDEX_SECONDS:
+            return _index[2]
+        changes_before = deck_changes()
+        names = users.usernames()
+        rows = [
+            {
+                "id": deck.id,
+                "title": _public_name(deck) or deck.commander,
+                "commander": deck.commander,
+                "color_identity": deck.commander_color_identity,
+                "cards": deck.cards,
+                "card_count": len(deck.cards) + 1,
+                "owner_name": _owner_name(deck.owner_id, names),
+                "updated_at": deck.updated_at,
+            }
+            for deck in list_decks()
+            if deck.public and deck.commander
+        ]
+        rows.sort(key=lambda row: row["updated_at"], reverse=True)
+        _index = (changes_before, now, rows)
+        return rows
+
+
+@app.get("/public/decks")
+@public
+def list_public_decks_endpoint(
+    request: Request,
+    q: str = Query("", max_length=100),
+    sort: Literal["updated", "name"] = "updated",
+    limit: int = Query(24, ge=1, le=60),
+    offset: int = Query(0, ge=0, le=100_000),
+) -> PublicDeckList:
+    """The decks anyone can browse: the public ones with a commander, newest first or by name, and a
+    search that looks in the title, the commander and the builder's username."""
+    wait = auth.browse_limiter.begin(auth.client_key(request))
+    if wait:
+        raise HTTPException(status_code=429, detail="Too many requests. Try again in a moment.", headers={"Retry-After": str(wait)})
+    rows = _public_index()
+    needle = q.strip().lower()
+    if needle:
+        rows = [r for r in rows if needle in r["title"].lower() or needle in r["commander"].lower() or needle in (r["owner_name"] or "").lower()]
+    if sort == "name":
+        rows = sorted(rows, key=lambda r: (r["title"].lower(), r["id"]))
+    page = rows[offset : offset + limit]
+    infos = peek_card_info_many({name for r in page for name in [*r["cards"], r["commander"]]})
+    return PublicDeckList(
+        total=len(rows),
+        decks=[
+            PublicDeckSummary(
+                id=r["id"],
+                title=r["title"],
+                commander=r["commander"],
+                commander_id=(infos.get(r["commander"]) or {}).get("id"),
+                color_identity=r["color_identity"],
+                card_count=r["card_count"],
+                price_usd=round(sum(float((infos.get(n) or {}).get("priceUsd") or 0) for n in [*r["cards"], r["commander"]]), 2),
+                owner_name=r["owner_name"],
+                updated_at=r["updated_at"],
+            )
+            for r in page
+        ],
+    )
+
+
 @app.get("/public/decks/{deck_id}")
 @public
 def get_public_deck_endpoint(deck_id: str, request: Request) -> PublicDeck:
     deck = _public_deck_or_404(deck_id, request)
     return PublicDeck(
-        name=deck.name,
+        name=_public_name(deck),
         commander=deck.commander,
         commander_color_identity=deck.commander_color_identity,
         cards=deck.cards,
@@ -376,6 +504,7 @@ def get_public_deck_endpoint(deck_id: str, request: Request) -> PublicDeck:
             for name, choice in deck.printings.items()
             if name in deck.cards or name == deck.commander
         },
+        owner_name=_owner_name(deck.owner_id, users.usernames()),
         updated_at=deck.updated_at,
     )
 
@@ -397,6 +526,7 @@ def auth_status_endpoint(request: Request) -> dict:
         "configured": state != "unconfigured",
         "signed_in": state == "off" or user is not None,
         "email": user.email if user else None,
+        "username": user.username if user else None,
     }
 
 
@@ -430,7 +560,29 @@ def login_endpoint(body: LoginRequest, request: Request, response: Response) -> 
         samesite="lax",
         secure=auth.is_https(request.scope),
     )
-    return {"ok": True, "email": user.email}
+    return {"ok": True, "email": user.email, "username": user.username}
+
+
+class UsernameRequest(BaseModel):
+    username: str = Field(max_length=50)
+
+
+@app.get("/account")
+def account_endpoint() -> dict:
+    """The signed-in user's own details: the email only they see, and the username everyone sees."""
+    user = auth.current_user.get()
+    return {"email": user.email if user else None, "username": user.username if user else None}
+
+
+@app.post("/account/username")
+def set_username_endpoint(request: UsernameRequest) -> dict:
+    user = auth.current_user.get()
+    if user is None:
+        raise HTTPException(status_code=400, detail="There is no account to give a username to: the app is running without sign-in.")
+    try:
+        return {"username": users.set_username(user, request.username).username}
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err))
 
 
 @app.post("/auth/logout")
@@ -448,7 +600,19 @@ def logout_endpoint(request: Request, response: Response) -> dict:
 
 @app.post("/decks/{deck_id}/name")
 def rename_deck_endpoint(deck_id: str, request: DeckNameRequest) -> Deck:
-    return rename_deck(_get_deck_or_404(deck_id), request.name)
+    deck = _get_deck_or_404(deck_id)
+    _refuse_profanity(request.name)
+    return rename_deck(deck, request.name)
+
+
+class VisibilityRequest(BaseModel):
+    public: StrictBool
+
+
+@app.post("/decks/{deck_id}/visibility")
+def set_visibility_endpoint(deck_id: str, request: VisibilityRequest) -> Deck:
+    """Makes a deck public (on the browse page, open to anyone) or private (the owner's alone)."""
+    return set_visibility(_get_deck_or_404(deck_id), request.public)
 
 
 @app.post("/decks/{deck_id}/chat")
@@ -805,8 +969,10 @@ def hub_endpoint() -> dict:
     for deck in _my_decks():
         includes = peek_commander_includes(deck.commander) if deck.commander else {"available": False}
         by_name = {c["name"]: c for c in includes["cards"]} if includes.get("available") else {}
-        commander_info = peek_card_info(deck.commander) if deck.commander else None
-        price = sum(float((peek_card_info(n) or {}).get("priceUsd") or 0) for n in [*deck.cards, deck.commander or ""])
+        deck_names = [*deck.cards, deck.commander or ""]
+        infos = peek_card_info_many(deck_names)
+        commander_info = infos.get(deck.commander) if deck.commander else None
+        price = sum(float((infos.get(n) or {}).get("priceUsd") or 0) for n in deck_names)
         cuts = _present_cuts(deck, load_ai_result("cuts", deck.id)).cuts
 
         decks.append(
@@ -819,6 +985,7 @@ def hub_endpoint() -> dict:
                 "card_count": len(deck.cards) + (1 if deck.commander else 0),
                 "price_usd": round(price, 2),
                 "updated_at": deck.updated_at,
+                "public": deck.public,
                 "discoveries": _present_discoveries(deck, load_ai_result("discoveries", deck.id), _codes(latest)),
                 "review": (
                     {
@@ -965,7 +1132,7 @@ def get_public_card_info_endpoint(deck_id: str, body: CardInfoBatchRequest, requ
 def get_public_rulings_endpoint(deck_id: str, id: str, request: Request) -> dict:
     deck = _public_deck_or_404(deck_id, request)
     names = set(deck.cards) | ({deck.commander} if deck.commander else set())
-    ids = {info["id"] for info in (peek_card_info(name) for name in names) if info and info.get("id")}
+    ids = {info["id"] for info in peek_card_info_many(names).values() if info.get("id")}
     if id not in ids:
         raise HTTPException(status_code=404, detail="That card isn't in this deck.")
     return {"rulings": get_rulings(id)}

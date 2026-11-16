@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import Logo from "./Logo";
 import "./guest.css";
 
@@ -16,14 +17,17 @@ const FEATURES = [
   },
 ];
 
-// The front door for someone who isn't signed in: the mark, what the app is, and nothing else. The way
-// in is the Sign in button in the app bar. A deck is only reachable from a link its owner sends.
+// The front door for someone who isn't signed in: the mark, what the app is, and a way to browse the decks
+// people have made public. The way in to build your own is the Sign in button in the app bar.
 export default function GuestLanding() {
   return (
     <div className="guest">
       <Logo size={80} />
       <h1 className="guest-name">MTG Deck Doctor</h1>
       <p className="guest-tagline">The AI-powered deck builder for Commander.</p>
+      <Link to="/browse" className="guest-browse">
+        Browse decks
+      </Link>
       <div className="guest-features">
         {FEATURES.map((f) => (
           <div key={f.title} className="guest-feature">

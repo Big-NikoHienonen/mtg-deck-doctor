@@ -15,6 +15,7 @@ import {
   removeCard,
   removeFromCollection,
   renameDeck,
+  setDeckVisibility,
   sendMessage,
   setCommander,
   setDeckPrintings,
@@ -473,8 +474,24 @@ export default function DeckView() {
 
   async function handleRenameSave() {
     if (!deck) return;
-    setDeck(await renameDeck(deck.id, nameInput));
+    setError(null);
+    try {
+      setDeck(await renameDeck(deck.id, nameInput));
+    } catch (err) {
+      // The name wasn't allowed, or the backend couldn't be reached. The deck keeps the name it had.
+      setError(err instanceof Error ? err.message : "Couldn't rename the deck.");
+    }
     setRenaming(false);
+  }
+
+  async function handleToggleVisibility() {
+    if (!deck) return;
+    setError(null);
+    try {
+      setDeck(await setDeckVisibility(deck.id, !deck.public));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't change who can see this deck.");
+    }
   }
 
   const displayTitle = deck ? (deck.name ?? deck.commander ?? "Untitled deck") : "No commander yet";
@@ -570,6 +587,7 @@ export default function DeckView() {
         printing={deck?.commander ? selectedPrintings[deck.commander] : undefined}
         showCommander={!!deck?.name}
         onOpenCommander={() => deck?.commander && setModalCard(deck.commander)}
+        isPrivate={deck ? !deck.public : false}
         title={title}
         colorIdentity={deck?.commander_color_identity ?? []}
         cardCount={totalCardCount}
@@ -613,6 +631,13 @@ export default function DeckView() {
               onDelete={handleDeleteDeck}
             />
             <div className="dv-grow" />
+            <button
+              className="dv-action"
+              onClick={handleToggleVisibility}
+              title={deck.public ? "Anyone can find this deck and open it. Click to make it private." : "Only you can see this deck. Click to make it public."}
+            >
+              {deck.public ? "Public" : "Private"}
+            </button>
             <Link to={`/search?deck=${deck.id}`} className="dv-action">
               Browse all cards →
             </Link>

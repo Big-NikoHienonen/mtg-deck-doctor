@@ -11,8 +11,9 @@ function commanderQuery(text: string): string {
   return `${words.map((w) => `name:"${w}"`).join(" ")} is:commander legal:commander`;
 }
 
-// "New deck": a name and a commander, then straight to the deck. Both are optional: a deck without a
-// commander asks for one on its own page, and one without a name is called after its commander.
+// "New deck": a name and a commander, and whether the deck is public, then straight to the deck. The name
+// and the commander are optional: a deck without a commander asks for one on its own page, and one without
+// a name is called after its commander. A deck is public unless you choose otherwise.
 export default function NewDeckModal({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
   const ids = useId();
@@ -22,6 +23,7 @@ export default function NewDeckModal({ onClose }: { onClose: () => void }) {
   const [searching, setSearching] = useState(false);
   const [highlighted, setHighlighted] = useState(0);
   const [commander, setCommander] = useState<SearchCard | null>(null);
+  const [isPublic, setIsPublic] = useState(true);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -93,7 +95,7 @@ export default function NewDeckModal({ onClose }: { onClose: () => void }) {
     setCreating(true);
     setError(null);
     try {
-      const deck = await createDeck({ name: name.trim(), commander: commander?.name ?? "" });
+      const deck = await createDeck({ name: name.trim(), commander: commander?.name ?? "", public: isPublic });
       navigate(`/decks/${deck.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't create the deck.");
@@ -168,6 +170,24 @@ export default function NewDeckModal({ onClose }: { onClose: () => void }) {
             </>
           )}
         </div>
+
+        <fieldset className="nd-vis">
+          <legend>Who can see it</legend>
+          <label>
+            <input type="radio" name={`${ids}-vis`} checked={isPublic} onChange={() => setIsPublic(true)} />
+            <span>
+              <strong>Public</strong>
+              <small>On the browse page, and anyone can open it, signed in or not.</small>
+            </span>
+          </label>
+          <label>
+            <input type="radio" name={`${ids}-vis`} checked={!isPublic} onChange={() => setIsPublic(false)} />
+            <span>
+              <strong>Private</strong>
+              <small>Only you. You can change this any time from the deck's page.</small>
+            </span>
+          </label>
+        </fieldset>
 
         {error && (
           <div className="nd-error" role="alert">

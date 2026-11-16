@@ -78,6 +78,8 @@ export type Deck = {
   messages: Message[];
   // The printing used for each card, by card name (see printings.ts). Visitors see these too.
   printings: Record<string, SelectedPrinting>;
+  // Public decks are on the browse page and open to anyone; a private deck is its owner's alone.
+  public: boolean;
   updated_at: string;
   // Counts saves; the backend refuses to save over a version it hasn't seen.
   version: number;
@@ -93,7 +95,7 @@ export function extractText(content: string | MessageBlock[]): string {
 
 // A new deck, optionally named and with its commander set. A commander that can't lead is refused with
 // the reason, and no deck is made.
-export async function createDeck(options?: { name?: string; commander?: string }): Promise<Deck> {
+export async function createDeck(options?: { name?: string; commander?: string; public?: boolean }): Promise<Deck> {
   const res = await safeFetch(
     `${API_BASE}/decks`,
     options ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(options) } : { method: "POST" },
@@ -107,6 +109,61 @@ export async function createDeck(options?: { name?: string; commander?: string }
 }
 
 // The decks without their chat history: `messages` is empty on every one. Open a deck (getDeck) for its conversation.
+// Makes a deck public (on the browse page, open to anyone) or private (its owner's alone).
+export async function setDeckVisibility(id: string, isPublic: boolean): Promise<Deck> {
+  const res = await safeFetch(`${API_BASE}/decks/${encodeURIComponent(id)}/visibility`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ public: isPublic }),
+  });
+  if (!res) throw new Error("Couldn't reach the Deck Doctor backend. Is it running on port 8000?");
+  if (!res.ok) throw new Error(detailOf(await res.json().catch(() => null), "Couldn't change who can see this deck."));
+  return res.json();
+}
+
+// One deck on the browse page.
+export type PublicDeckSummary = {
+  id: string;
+  title: string;
+  commander: string;
+  commander_id: string | null;
+  color_identity: string[];
+  card_count: number;
+  price_usd: number;
+  owner_name: string | null;
+  updated_at: string;
+};
+
+export type PublicDeckList = { decks: PublicDeckSummary[]; total: number };
+
+// The decks anyone can browse, without signing in. Throws a sentence to show when it can't.
+export async function listPublicDecks(options: { q?: string; sort?: "updated" | "name"; limit?: number; offset?: number } = {}): Promise<PublicDeckList> {
+  const params = new URLSearchParams();
+  if (options.q?.trim()) params.set("q", options.q.trim());
+  if (options.sort) params.set("sort", options.sort);
+  if (options.limit) params.set("limit", String(options.limit));
+  if (options.offset) params.set("offset", String(options.offset));
+  const res = await safeFetch(`${API_BASE}/public/decks?${params}`);
+  if (!res) throw new Error("Couldn't reach the Deck Doctor backend. Is it running on port 8000?");
+  if (res.status === 429) throw new Error("Slow down a little: too many requests. Try again in a moment.");
+  if (!res.ok) throw new Error("Couldn't load the decks. Try again.");
+  return res.json();
+}
+
+// Sets the signed-in user's username, which is what other people see beside their public decks.
+// Throws what to tell the person if it won't do.
+export async function saveUsername(username: string): Promise<string> {
+  const res = await safeFetch(`${API_BASE}/account/username`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username }),
+  });
+  if (!res) throw new Error("Couldn't reach the Deck Doctor backend. Is it running on port 8000?");
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(res.status === 422 ? "A username is 3 to 24 characters: letters, numbers, hyphens and underscores." : detailOf(body, "Couldn't save that username."));
+  return body.username;
+}
+
 export async function listDecks(): Promise<Deck[]> {
   const res = await safeFetch(`${API_BASE}/decks`);
   if (!res || !res.ok) throw new Error("failed to list decks");
@@ -152,6 +209,8 @@ export type PublicDeck = {
   commander_color_identity: string[];
   cards: string[];
   printings: Record<string, SelectedPrinting>;
+  // The builder's username, or null if they haven't chosen one. Never their email.
+  owner_name: string | null;
   updated_at: string;
 };
 
@@ -164,7 +223,7 @@ export async function getPublicDeck(deckId: string): Promise<PublicDeck | null> 
   return res.json();
 }
 
-export type AuthStatus = { required: boolean; configured: boolean; signed_in: boolean; email: string | null };
+export type AuthStatus = { required: boolean; configured: boolean; signed_in: boolean; email: string | null; username: string | null };
 
 // Whether the backend asks for a sign-in, and whether this browser has signed in. Null when the
 // backend can't be reached.
@@ -175,7 +234,7 @@ export async function getAuthStatus(): Promise<AuthStatus | null> {
 }
 
 // Who it signed in (null when the backend asks for no sign-in), or what to tell the person.
-export type LoginResult = { email: string | null } | { error: string };
+export type LoginResult = { email: string | null; username: string | null } | { error: string };
 
 export async function logIn(email: string, password: string): Promise<LoginResult> {
   const res = await safeFetch(`${API_BASE}/auth/login`, {
@@ -185,7 +244,7 @@ export async function logIn(email: string, password: string): Promise<LoginResul
   });
   if (!res) return { error: "Couldn't reach the Deck Doctor backend. Is it running on port 8000?" };
   const body = await res.json().catch(() => null);
-  if (res.ok) return { email: typeof body?.email === "string" ? body.email : null };
+  if (res.ok) return { email: typeof body?.email === "string" ? body.email : null, username: typeof body?.username === "string" ? body.username : null };
   if (res.status === 401) return { error: "Incorrect email or password." };
   if (res.status === 429) {
     const minutes = Math.max(1, Math.ceil(Number(res.headers.get("Retry-After")) / 60));
@@ -481,6 +540,7 @@ export type HubDeck = {
   card_count: number;
   price_usd: number;
   updated_at: string;
+  public: boolean;
   // null until the Doctor has looked through the newest sets for this deck.
   discoveries: DeckDiscoveries | null;
   // null until the Doctor has reviewed the deck.

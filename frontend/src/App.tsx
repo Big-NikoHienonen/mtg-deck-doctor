@@ -3,11 +3,13 @@ import { Route, Routes } from "react-router-dom";
 import AdminPage from "./AdminPage";
 import AppBar from "./AppBar";
 import AuthGate from "./AuthGate";
+import BrowsePage from "./BrowsePage";
 import { refreshAuth } from "./authStore";
 import DeckRoute from "./DeckRoute";
 import DecksPage from "./DecksPage";
 import LandingView from "./LandingView";
 import LoginPage from "./LoginPage";
+import ProfilePage from "./ProfilePage";
 import CardSearchPage from "./CardSearchPage";
 import CardSearchResultsPage from "./CardSearchResultsPage";
 
@@ -23,10 +25,12 @@ export default function App() {
       <main className="page">
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/browse" element={<BrowsePage />} />
           <Route path="/decks/:deckId" element={<DeckRoute />} />
           <Route element={<AuthGate />}>
             <Route path="/" element={<LandingView />} />
             <Route path="/decks" element={<DecksPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/search" element={<CardSearchPage />} />
             <Route path="/search/results" element={<CardSearchResultsPage />} />

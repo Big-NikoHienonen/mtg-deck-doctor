@@ -7,11 +7,12 @@ import ThemePicker from "./ThemePicker";
 import "./appbar.css";
 
 // The bar along the top of every page: the logo, which goes to the landing page, the places to go from
-// anywhere (My decks, My collection, Search cards, Admin), New deck, and the theme. New deck is a
-// window over whatever page you are on, so it lives here. Sign out shows when the backend asks for a sign-in.
-// Someone who isn't signed in, looking at a deck or at the front door, gets the name, a Sign in link
-// (to the sign-in page, which brings them back here) and the theme, and nothing to go to. So does the moment before it is known whether this browser is
-// signed in.
+// anywhere (My decks, Browse, My collection, Search cards, Admin), New deck, and the theme. New deck is a
+// window over whatever page you are on, so it lives here. Your username, which opens your profile, and
+// Sign out show when the backend asks for a sign-in.
+// Someone who isn't signed in gets the name, Browse (which needs no sign-in), a Sign in link (to the
+// sign-in page, which brings them back here) and the theme, and nothing else to go to. So does the moment
+// before it is known whether this browser is signed in.
 export default function AppBar() {
   const { pathname, search } = useLocation();
   const auth = useAuth();
@@ -24,6 +25,7 @@ export default function AppBar() {
   const inCollection = pathname === "/search/results" && new URLSearchParams(search).get("collection") === "1";
   const links = [
     { to: "/decks", label: "My decks", current: pathname === "/decks" || pathname.startsWith("/decks/") },
+    { to: "/browse", label: "Browse", current: pathname === "/browse" },
     { to: "/search/results?collection=1", label: "My collection", current: inCollection },
     { to: "/search", label: "Search cards", current: pathname.startsWith("/search") && !inCollection },
     { to: "/admin", label: "Admin", current: pathname === "/admin" },
@@ -49,11 +51,21 @@ export default function AppBar() {
               New deck
             </button>
             {auth.required && (
-              <button type="button" className="app-bar-link" onClick={() => signOut()} title={auth.email ? `Signed in as ${auth.email}` : undefined}>
-                Sign out
-              </button>
+              <>
+                <Link to="/profile" className="app-bar-link" aria-current={pathname === "/profile" ? "page" : undefined} title={auth.email ? `Signed in as ${auth.email}` : undefined}>
+                  {auth.username ?? "Set username"}
+                </Link>
+                <button type="button" className="app-bar-link" onClick={() => signOut()}>
+                  Sign out
+                </button>
+              </>
             )}
           </>
+        )}
+        {visitor && (
+          <Link to="/browse" className="app-bar-link" aria-current={pathname === "/browse" ? "page" : undefined}>
+            Browse
+          </Link>
         )}
         {visitor && pathname !== "/login" && (
           <Link to="/login" state={{ from: pathname + search }} className="app-bar-link">

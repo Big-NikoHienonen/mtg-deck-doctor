@@ -60,7 +60,7 @@ c = fresh()
 res = c.get("/decks")
 check("with no account and no opt-out the app is closed, and says how to open it", res.status_code == 503 and "create-user" in res.json()["detail"], res.text)
 status = c.get("/auth/status").json()
-check("...and says so", status == {"required": True, "configured": False, "signed_in": False, "email": None}, str(status))
+check("...and says so", status == {"required": True, "configured": False, "signed_in": False, "email": None, "username": None}, str(status))
 check("...login can't succeed", c.post("/auth/login", json={"email": OWNER[0], "password": OWNER[1]}).status_code == 503)
 check("...a public deck page still answers (404: there is no such deck)", c.get("/public/decks/deadbeef").status_code == 404)
 
@@ -68,7 +68,7 @@ check("...a public deck page still answers (404: there is no such deck)", c.get(
 
 c = fresh(open_mode=True)
 check("MTG_DECK_DOCTOR_AUTH=off with no account runs open", c.get("/decks").status_code == 200)
-check("...and tells the page there's nothing to sign in to", c.get("/auth/status").json() == {"required": False, "configured": True, "signed_in": True, "email": None})
+check("...and tells the page there's nothing to sign in to", c.get("/auth/status").json() == {"required": False, "configured": True, "signed_in": True, "email": None, "username": None})
 check("...login does nothing", c.post("/auth/login", json={"email": "x@example.com", "password": "whatever"}).json() == {"ok": True, "email": None})
 c = fresh(OWNER, open_mode=True)
 check("an account wins over running open, so a stray setting can't leave a server open", c.get("/decks").status_code == 401)
@@ -77,13 +77,13 @@ check("an account wins over running open, so a stray setting can't leave a serve
 
 c = fresh(OWNER)
 check("without the cookie a route is refused", c.get("/decks").status_code == 401)
-check("...status says to sign in", c.get("/auth/status").json() == {"required": True, "configured": True, "signed_in": False, "email": None})
+check("...status says to sign in", c.get("/auth/status").json() == {"required": True, "configured": True, "signed_in": False, "email": None, "username": None})
 
 public_names = sorted(r.endpoint.__name__ for r in api.app.routes if isinstance(r, APIRoute) and getattr(r.endpoint, "public", False))
 check(
     "only the login and public deck routes are open",
     public_names
-    == sorted(["auth_status_endpoint", "login_endpoint", "logout_endpoint", "get_public_deck_endpoint", "get_public_card_info_endpoint", "get_public_rulings_endpoint"]),
+    == sorted(["auth_status_endpoint", "login_endpoint", "logout_endpoint", "get_public_deck_endpoint", "get_public_card_info_endpoint", "get_public_rulings_endpoint", "list_public_decks_endpoint"]),
     str(public_names),
 )
 
@@ -115,11 +115,11 @@ check("both fields are needed", c.post("/auth/login", json={"password": OWNER[1]
 
 ok = c.post("/auth/login", json={"email": "  OWNER@Example.com ", "password": OWNER[1]})
 cookie = ok.headers.get("set-cookie", "")
-check("the right email and password sign in, whatever the capitals", ok.status_code == 200 and ok.json() == {"ok": True, "email": OWNER[0]} and auth.COOKIE in ok.cookies)
+check("the right email and password sign in, whatever the capitals", ok.status_code == 200 and ok.json() == {"ok": True, "email": OWNER[0], "username": None} and auth.COOKIE in ok.cookies)
 check("...with a cookie JavaScript can't read, and that other sites don't send", "httponly" in cookie.lower() and "samesite=lax" in cookie.lower(), cookie)
 check("...not marked secure over plain http", "secure" not in cookie.lower())
 check("...but secure over https", "secure" in TestClient(api.app, base_url="https://testserver").post("/auth/login", json={"email": OWNER[0], "password": OWNER[1]}).headers.get("set-cookie", "").lower())
-check("once signed in the routes work, and status says who", c.get("/decks").status_code == 200 and c.get("/auth/status").json() == {"required": True, "configured": True, "signed_in": True, "email": OWNER[0]})
+check("once signed in the routes work, and status says who", c.get("/decks").status_code == 200 and c.get("/auth/status").json() == {"required": True, "configured": True, "signed_in": True, "email": OWNER[0], "username": None})
 check("the sign-in is noted on the account", users.find_user(OWNER[0]).last_login_at is not None)
 mode_file = stat.S_IMODE(auth.SECRET_PATH.stat().st_mode)
 check("the session secret is readable by its owner only", mode_file == 0o600, oct(mode_file))

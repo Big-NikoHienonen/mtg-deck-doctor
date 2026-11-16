@@ -16,9 +16,11 @@ export type AuthState = {
   signedIn: boolean;
   // Who this browser is signed in as. Null when it isn't, or when the backend asks for no sign-in.
   email: string | null;
+  // What other people see of this user, on their public decks. Null until they choose one.
+  username: string | null;
 };
 
-let state: AuthState = { checked: false, unreachable: false, required: false, configured: true, signedIn: false, email: null };
+let state: AuthState = { checked: false, unreachable: false, required: false, configured: true, signedIn: false, email: null, username: null };
 const listeners = new Set<() => void>();
 
 function set(next: Partial<AuthState>) {
@@ -43,23 +45,28 @@ export async function refreshAuth(): Promise<void> {
     set({ checked: true, unreachable: true });
     return;
   }
-  set({ checked: true, unreachable: false, required: status.required, configured: status.configured, signedIn: status.signed_in, email: status.email });
+  set({ checked: true, unreachable: false, required: status.required, configured: status.configured, signedIn: status.signed_in, email: status.email, username: status.username ?? null });
 }
 
 // Null once signed in, otherwise what to tell the person.
 export async function signIn(email: string, password: string): Promise<string | null> {
   const result = await logIn(email, password);
   if ("error" in result) return result.error;
-  set({ signedIn: true, email: result.email });
+  set({ signedIn: true, email: result.email, username: result.username });
   return null;
+}
+
+// The username the backend saved, once the profile page has set it.
+export function usernameChanged(username: string): void {
+  set({ username });
 }
 
 export async function signOut(): Promise<void> {
   await logOut();
-  set({ signedIn: false, email: null });
+  set({ signedIn: false, email: null, username: null });
 }
 
 // The backend refused a request: the session ended, or the user was signed out everywhere.
 onUnauthorized(() => {
-  if (state.required) set({ signedIn: false, email: null });
+  if (state.required) set({ signedIn: false, email: null, username: null });
 });

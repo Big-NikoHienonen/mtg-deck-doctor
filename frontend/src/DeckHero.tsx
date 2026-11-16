@@ -12,6 +12,9 @@ export default function DeckHero({
   showCommander,
   onOpenCommander,
   showBack = true,
+  backTo = { to: "/decks", label: "← ALL DECKS" },
+  byline,
+  isPrivate = false,
   title,
   colorIdentity,
   cardCount,
@@ -29,6 +32,12 @@ export default function DeckHero({
   onOpenCommander: () => void;
   // The way back to the owner's decks. Left off for someone who isn't signed in.
   showBack?: boolean;
+  // Where the way back goes, and what it says.
+  backTo?: { to: string; label: string };
+  // Who built the deck, as a username, when it is known and other people are looking.
+  byline?: string | null;
+  // Shows a Private badge, for the owner looking at a deck only they can see.
+  isPrivate?: boolean;
   // The name, as a heading; the page decides how it is renamed.
   title: ReactNode;
   colorIdentity: string[];
@@ -44,8 +53,8 @@ export default function DeckHero({
       {art && <div className="dv-hero-art" style={{ backgroundImage: `url(${art})` }} />}
       <div className="dv-container dv-hero-body">
         {showBack ? (
-          <Link to="/decks" className="dv-back">
-            ← ALL DECKS
+          <Link to={backTo.to} className="dv-back">
+            {backTo.label}
           </Link>
         ) : null}
         <div className="dv-spacer" />
@@ -58,6 +67,11 @@ export default function DeckHero({
         {title}
         <div className="dv-badges">
           <span className="dv-badge">Commander</span>
+          {isPrivate && (
+            <span className="dv-badge" title="Only you can see this deck">
+              Private
+            </span>
+          )}
           {colorIdentity.length > 0 && (
             <span className="dv-badge">
               <ManaPips colors={colorIdentity} size={14} />
@@ -65,6 +79,11 @@ export default function DeckHero({
           )}
         </div>
         <div className="dv-meta">
+          {byline && (
+            <span>
+              by <strong>{byline}</strong>
+            </span>
+          )}
           <span>{cardCount}/100 cards</span>
           <span>${price.toFixed(2)}</span>
           {costToComplete > 0 && costToComplete < price && <span>${costToComplete.toFixed(2)} to complete</span>}

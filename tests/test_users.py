@@ -152,6 +152,20 @@ check("...and says so for nobody", "no account" in (exits_with("claim-decks", "n
 check("...and takes a deck whose owner has no account here", json.loads((D.DECKS_DIR / "eeee5555.json").read_text())["owner_id"] == users.find_user("two@example.com").id)
 check("...but not a deck an account here owns", json.loads((D.DECKS_DIR / "dddd4444.json").read_text())["owner_id"] == first.id)
 
+check("an account can be made with a username", exits_with("create-user", "four@example.com", "--username", "Four_Four", password="a fourth long password") is None and users.find_user("four@example.com").username == "Four_Four")
+check("...a taken one is refused, whatever the capitals, and no account is made", "taken" in (exits_with("create-user", "five@example.com", "--username", "four_four", password="a fifth long password") or "") and users.find_user("five@example.com") is None)
+check("...a profane one is refused without saying which word", (exits_with("create-user", "six@example.com", "--username", "shithead", password="a sixth long password") or "") == "That username isn't allowed." and users.find_user("six@example.com") is None)
+check("set-username gives an account one", exits_with("set-username", "two@example.com", "Two_Two") is None and users.find_user("two@example.com").username == "Two_Two")
+check("...and refuses a bad or taken one, leaving the old", "3 to 24" in (exits_with("set-username", "two@example.com", "x") or "") and "taken" in (exits_with("set-username", "two@example.com", "FOUR_FOUR") or "") and users.find_user("two@example.com").username == "Two_Two")
+check("...and says so for nobody", "no account" in (exits_with("set-username", "nobody@example.com", "Someone") or "").lower())
+listing = io.StringIO()
+real_stdout, sys.stdout = sys.stdout, listing
+try:
+    cli.main(["list-users"])
+finally:
+    sys.stdout = real_stdout
+check("list-users shows each username, and says so for an account without one", "Two_Two" in listing.getvalue() and "(no username)" in listing.getvalue() and "Four_Four" in listing.getvalue())
+
 check("a duplicate email is refused with a reason", "already an account" in (exits_with("create-user", "NIKO@example.com", password="another long password") or ""))
 check("a short password is refused with a reason", "at least" in (exits_with("create-user", "three@example.com", password="short") or ""))
 check("a bad email is refused with a reason", "email" in (exits_with("create-user", "nonsense", password="a long enough password") or ""))

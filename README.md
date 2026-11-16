@@ -14,7 +14,7 @@ The backend is FastAPI (Python, managed with uv). The front end is React and Typ
 - Insights: EDHREC's top includes for your commander, a health check, cut suggestions, and swaps.
 - Correspondence: a chat with the Doctor about the deck. The Doctor only suggests. It shows each card it wants to add or cut, or a commander it wants you to use, as a button under its reply, and nothing changes until you click it. The rules check every suggestion first: legality, color identity, the singleton rule, and the 99-card limit.
 - Import and export decklists, pick printings (kept with the deck, so visitors see them), and track which cards you own.
-- Public view: anyone can open a deck's address to look at the list, with no chat, insights, or editing. Sign in at the same address to edit. See [Sign in and public decks](#sign-in-and-public-decks).
+- Public and private decks: each deck is public (the default) or private. Anyone can browse the public ones at `/browse` without signing in, and open one to look at the list, with no chat, insights, or editing. A private deck is its owner's alone. Decks show their builder's username, never an email. See [Public and private decks](#public-and-private-decks).
 
 **Home** (`/`) is the landing page: new cards and new commanders from recent sets that are worth a look, with a link to every new card. **My decks** (`/decks`) lists your decks, and holds the swaps the Doctor has worked out. **Card search** (`/search`) searches Scryfall.
 
@@ -82,7 +82,7 @@ Make an account first (see [Accounts](#accounts)), then run:
 
 It builds the front end and starts the backend on `127.0.0.1:8000`. Set `HOST` and `PORT` to change that. Run the app through HTTPS, so the login cookie is marked secure. Behind a proxy or tunnel that ends HTTPS, `serve.sh` already passes `--proxy-headers`, so the backend sees the visitor's address and the real scheme.
 
-A deck's address, `<address>/decks/<id>`, then opens a read-only view of the list for anyone who can reach it. For a quick test from your own machine, point a tunnel at port 8000. To host it, you need a disk that persists, because decks, your collection, and the caches are files under `data/`, and `data/session_secret` signs the login cookie.
+A public deck's address, `<address>/decks/<id>`, opens a read-only view of the list for anyone who can reach it, and the deck is listed on the browse page (`/browse`). A private deck's address shows no deck to anyone but its owner. For a quick test from your own machine, point a tunnel at port 8000. To host it, you need a disk that persists, because decks, your collection, and the caches are files under `data/`, and `data/session_secret` signs the login cookie.
 
 ## Deploy on Fly.io
 
@@ -133,7 +133,7 @@ Then make your account on the Machine. The first account takes every deck that h
 
 ```bash
 fly ssh console -u app
-/app/.venv/bin/mtg-deck-doctor create-user you@example.com
+/app/.venv/bin/mtg-deck-doctor create-user you@example.com --username YourName
 ```
 
 Open the app with `fly open` and sign in. A deck's address is `https://<app>.fly.dev/decks/<id>`.
@@ -157,7 +157,7 @@ To run the image locally, with Docker running, then make an account in the runni
 ```bash
 docker build -t mtg-deck-doctor .
 docker run -d --name mtg-deck-doctor -p 8080:8080 -e ANTHROPIC_API_KEY=<your key> -v mtg-data:/app/data mtg-deck-doctor
-docker exec -it mtg-deck-doctor mtg-deck-doctor create-user you@example.com
+docker exec -it -u app mtg-deck-doctor mtg-deck-doctor create-user you@example.com --username YourName
 ```
 
 ## AI usage and limits
@@ -179,12 +179,12 @@ On a copy of a 41-message conversation, these changes cut what each call sends f
 
 ## Sign in and public decks
 
-The backend is closed to everyone, except for a deck's list. Once an account exists, every route refuses a browser that hasn't signed in, except the login routes and the public deck routes below. With no account, every route refuses every request (503) unless `MTG_DECK_DOCTOR_AUTH=off` says to run open, which `./dev-backend.sh` does. An account always turns the sign-in on, whatever `MTG_DECK_DOCTOR_AUTH` says, so a stray setting can't leave a server open.
+The backend is closed to everyone, except for public decks. Once an account exists, every route refuses a browser that hasn't signed in, except the login routes and the public deck routes below. With no account, every route refuses every request (503) unless `MTG_DECK_DOCTOR_AUTH=off` says to run open, which `./dev-backend.sh` does. An account always turns the sign-in on, whatever `MTG_DECK_DOCTOR_AUTH` says, so a stray setting can't leave a server open.
 
-- **Sign in.** Anyone who isn't signed in sees a landing page with the app's name and a short description, and nothing else, at every address except a deck's. The **Sign in** link in the app bar opens the sign-in page (`/login`), which brings you back to the page you were on once you're in. It asks for an email and a password, with a show/hide toggle for the password and a Caps Lock warning. A wrong email and a wrong password get the same answer, and take the same time. The backend then sets a signed, HTTP-only cookie that lasts 30 days and is marked secure over HTTPS. **Sign out** is in the app bar.
+- **Sign in.** Anyone who isn't signed in sees a landing page with the app's name, a short description and a Browse link, at every address except the browse page and a public deck's. The **Sign in** link in the app bar opens the sign-in page (`/login`), which brings you back to the page you were on once you're in. It asks for an email and a password, with a show/hide toggle for the password and a Caps Lock warning. A wrong email and a wrong password get the same answer, and take the same time. The backend then sets a signed, HTTP-only cookie that lasts 30 days and is marked secure over HTTPS. **Sign out** is in the app bar.
 - **Sign-in attempts are limited.** Each attempt counts before the password is checked, so a burst can't all get through. One address gets 8 attempts in 10 minutes and then a 429 until the window moves on, and all addresses together get 30. The overall limit holds even if an attacker makes up addresses; it also means a flood of guesses can lock you out of the sign-in page for up to 10 minutes. A browser that is already signed in isn't affected. A right password gives that address its attempts back. An IPv6 visitor counts as one address per `/64`. Behind Fly.io, `MTG_DECK_DOCTOR_PROXY=fly` makes the address the one Fly's proxy saw; behind a proxy on the same machine, `--proxy-headers` (which `serve.sh` passes) does that.
 - **Signing out ends every cookie the account has.** The cookie is a signed statement the server can't take back, so signing out raises the account's session version, which also ends a copy of the cookie and signs the account out of its other browsers. The cookie lasts 30 days otherwise.
-- **Deck addresses can't be guessed.** A new deck's id is 16 random hex digits (64 bits). Ids made before that have 8 and still work. A client that asks for 20 public addresses with no deck behind them in 10 minutes gets a 429 on every public deck route until the window moves on.
+- **A private deck can't be found.** Its public address answers 404, the same as an address with no deck, so its existence isn't revealed. A new deck's id is also 16 random hex digits (64 bits), so a public address can't be guessed either. Ids made before that have 8 and still work. A client that asks for 20 public addresses with no deck behind them in 10 minutes gets a 429 on every public deck route until the window moves on.
 - **Requests and inputs have limits.** A request body over 64 KB on a route a stranger can reach, or 2 MB on any other, gets a 413 without being read in full. A card name is at most 200 characters, a deck name 100, a chat message 8,000, a count or quantity 99, and a list 1,000 entries (20,000 for a collection import). `api.py` names them at the top of the request models.
 - **Security headers.** Every response carries a Content-Security-Policy that allows scripts only from this server and the page's own hosts (Scryfall's API and images, Google Fonts), `X-Frame-Options: DENY`, `nosniff`, a referrer policy and a permissions policy, and HSTS over HTTPS. `hardening.py` holds the list. If the page needs a new outside host, add it to the policy there.
 - **No API docs.** `/docs`, `/redoc` and the OpenAPI schema are off.
@@ -196,14 +196,15 @@ The backend is closed to everyone, except for a deck's list. Once an account exi
 There is no sign-up page. You make an account on the machine that holds the data, with a command that asks for the password without showing it. It never takes the password as an argument, because that would stay in the shell's history. Locally:
 
 ```bash
-uv run mtg-deck-doctor create-user you@example.com
+uv run mtg-deck-doctor create-user you@example.com --username YourName
 ```
 
 On Fly.io, run the same command in `fly ssh console`. The other commands:
 
 | Command | What it does |
 | --- | --- |
-| `create-user EMAIL` | Makes an account. The first account takes every deck that has no owner here: none, or an owner with no account on this machine. |
+| `create-user EMAIL` | Makes an account, with `--username NAME` if you want one now. The first account takes every deck that has no owner here: none, or an owner with no account on this machine. |
+| `set-username EMAIL NAME` | Gives an account a username, or a new one. |
 | `set-password EMAIL` | Sets a new password, which also signs the user out of every browser. |
 | `revoke-sessions EMAIL` | Signs the user out of every browser, keeping the password. |
 | `claim-decks EMAIL` | Gives every deck that has no owner here to the account. A deck owned by an account here is left alone. |
@@ -213,12 +214,20 @@ On Fly.io, run the same command in `fly ssh console`. The other commands:
 
 - **Passwords** are stored as salted scrypt hashes (`data/users/<id>.json`, readable by its owner only), never as text. The cost is kept with each hash, so it can be raised and an account's hash is upgraded at its next sign-in. A password needs at least 10 characters.
 - **The login cookie** holds the user's id, a session version, an expiry and a signature made with a random secret in `data/session_secret`, which the backend creates on first use. Raising the session version ends every cookie the user has. Keep the secret with `data/`.
-- **Each deck belongs to one account.** A signed-in user sees only their own decks, and another user's deck is a 404, the same as no deck. The public deck page is the one thing that reads any deck. While accounts exist, a deck with no owner belongs to no one until `claim-decks` gives it to one.
+- **Each deck belongs to one account.** A signed-in user sees only their own decks, and another user's deck is a 404, the same as no deck. The public deck routes are the one thing that reads any public deck. While accounts exist, a deck with no owner belongs to no one until `claim-decks` gives it to one.
 - **Not per account yet:** your collection, the card caches and the Doctor's usage numbers are shared by every account.
 
-**Every deck's page is public to read.** Open `/decks/<id>` without signing in and you get the list, card details, rulings, stats and Export, and nothing else: no chat with the Doctor, no insights, no editing, no collection toggle, and no printing choices. Nothing a visitor can reach calls the model. Signed in, the same address is the whole deck page. The home page, search, your collection and Admin need the sign-in, so nobody can find a deck's address from the app. Send someone the address in your browser's address bar.
+### Public and private decks
 
-These routes answer without a sign-in: `GET /public/decks/{id}`, `POST /public/decks/{id}/cards`, and `GET /public/decks/{id}/rulings`. The first returns the name, commander, colors, cards, the printings you picked and the last-updated date, and never the conversation or the keep list. The other two answer only for cards in that deck, so they can't be used to look up other cards through your server. A deck's id is 8 random hex characters, so an address can be guessed in principle. The printings you pick (and whether a card is a foil) are kept with the deck, so a visitor sees the same art and prices as you do.
+Every deck is **public** or **private**. A new deck is public unless you choose otherwise, in the New deck window or with the **Public/Private** button on the deck's page, which you can press any time. Decks made before there was a choice are public.
+
+- **Browse** (`/browse`, in the app bar and on the front door) lists public decks that have a commander, newest first or by name, with a search over the deck's title, its commander and its builder's username. It needs no sign-in. A deck made private leaves it at once.
+- **A public deck's page** (`/decks/<id>`) shows anyone, signed in or not, the list, card details, rulings, stats and Export, and who built it. There is no chat with the Doctor, no insights, no editing, no collection toggle and no printing choices. Nothing a visitor can reach calls the model. Its owner gets the whole deck page at the same address.
+- **A private deck** is visible to its owner alone. Every public route answers 404 for it, for strangers and for other signed-in users alike, so it looks the same as a deck that doesn't exist.
+- **Usernames.** What people see beside a public deck is the builder's username, never their email. Set one on your profile (your name in the app bar, `/profile`), or with `create-user --username` or `set-username` on the server. It is 3 to 24 letters, numbers, hyphens and underscores, can't be taken by two accounts (capitals don't count), can't be a reserved name like `admin`, and has to pass the profanity check. Until an account has a username, its decks are listed as "by an anonymous builder".
+- **Profanity check.** Usernames and deck names are checked when they are set, and a name that fails is refused without saying which word. `moderation.py` holds a short, strict list of strong profanity, sexual terms and slurs, and leaves mild words (damn, hell, crap) alone on purpose, because deck names are often card names and puns: "Hell's Caretaker", "Cockatrice" and "Assassin's Trophy" all pass. It sees through common disguises (`sh1t`, `f.u.c.k`, `fuuuck`, look-alike letters) but not everything. A name saved before the check, or before the list grew, is shown to strangers as the commander's name instead.
+
+These routes answer without a sign-in: `GET /public/decks` (the browse list, 120 requests a minute per address), `GET /public/decks/{id}`, `POST /public/decks/{id}/cards`, and `GET /public/decks/{id}/rulings`. A deck's page returns the name, commander, colors, cards, the printings you picked, the builder's username and the last-updated date, and never the conversation, the keep list, the owner's id or email. The cards and rulings routes answer only for cards in that deck, so they can't be used to look up other cards through your server. The printings you pick (and whether a card is a foil) are kept with the deck, so a visitor sees the same art and prices as you do.
 
 ## Test
 
@@ -245,6 +254,7 @@ cd frontend && npx tsc -b && npm run lint
 | `src/mtg_deck_doctor/server.py` | Serves the API under `/api` and the built front end, for running the app on one address. |
 | `src/mtg_deck_doctor/auth.py` | Signing in: the session cookie, who is signed in on a request, and the limits on guessing. |
 | `src/mtg_deck_doctor/hardening.py` | The request size limit and the security headers. |
+| `src/mtg_deck_doctor/moderation.py` | The profanity check for usernames and deck names. |
 | `docker-entrypoint.sh` | Starts the container as root only to hand `data/` to `app`, then drops root. |
 | `src/mtg_deck_doctor/users.py`, `cli.py` | The accounts (files, password hashes), and the commands that make them. |
 | `src/mtg_deck_doctor/tool_loop.py` | Every model call, with prompts, the chat's tools, and checks on what the model returns. |

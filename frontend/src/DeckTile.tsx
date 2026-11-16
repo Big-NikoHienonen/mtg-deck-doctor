@@ -82,7 +82,14 @@ export default function DeckTile({ deck, onDeleted }: { deck: HubDeck; onDeleted
         </button>
       </div>
       <div style={{ padding: "12px 14px 14px" }}>
-        <div style={{ fontSize: 18, fontWeight: 600, lineHeight: 1.25 }}>{deck.title}</div>
+        <div style={{ fontSize: 18, fontWeight: 600, lineHeight: 1.25 }}>
+          {deck.title}
+          {!deck.public && (
+            <span title="Only you can see this deck" style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", color: "var(--text-muted)", border: "1px solid var(--border)", borderRadius: 4, padding: "1px 6px", verticalAlign: "middle" }}>
+              PRIVATE
+            </span>
+          )}
+        </div>
         {deck.commander && deck.commander !== deck.title && (
           <div style={{ fontSize: 13, fontStyle: "italic", color: "var(--text-muted)" }}>{deck.commander}</div>
         )}
