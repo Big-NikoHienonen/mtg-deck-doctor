@@ -7,6 +7,8 @@ primary_region = "arn"
 [build]
 
 [env]
+  # Fly's proxy is the only way in, so the app reads the visitor's address and scheme from its headers.
+  MTG_DECK_DOCTOR_PROXY = "fly"
   # The most the Doctor may spend in a UTC day, in US dollars, estimated from token counts. Not secret, so
   # it lives here; change it and redeploy. The API key is a secret: `fly secrets set` (see the README).
   # Accounts are made on the Machine.

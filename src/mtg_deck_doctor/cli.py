@@ -9,6 +9,10 @@
 The password is asked for with a prompt that doesn't show it, and never taken from the command line,
 where it would stay in the shell's history. `--password-stdin` reads it from standard input instead, for a
 script.
+
+The server runs as an unprivileged user, so the files it reads must belong to that user. Run as root, this
+command gives up root first and acts as the owner of the `data` folder, so what it writes is readable by
+the server (`fly ssh console` opens a root session unless you pass `-u app`).
 """
 
 import argparse
@@ -19,6 +23,27 @@ from pathlib import Path
 
 from mtg_deck_doctor import users
 from mtg_deck_doctor.deck import claim_unowned_decks
+
+
+def privilege_target(euid: int, data_owner: tuple[int, int] | None) -> tuple[int, int] | None:
+    """The (user id, group id) to act as, or None to stay as the current user. Root acts as the owner of the
+    data folder, unless root owns it, or it isn't there yet."""
+    if euid != 0 or data_owner is None or data_owner[0] == 0:
+        return None
+    return data_owner
+
+
+def _drop_root() -> None:
+    try:
+        info = os.stat("data")
+    except FileNotFoundError:
+        return
+    target = privilege_target(os.geteuid(), (info.st_uid, info.st_gid))
+    if target is not None:
+        uid, gid = target
+        os.setgroups([])
+        os.setgid(gid)
+        os.setuid(uid)
 
 
 def _read_password(from_stdin: bool) -> str:
@@ -81,6 +106,7 @@ def _list_users(_: argparse.Namespace) -> None:
 def main(argv: list[str] | None = None) -> None:
     # The data folder is relative to the project, so run from there whatever folder the command was typed in.
     os.chdir(Path(__file__).resolve().parents[2])
+    _drop_root()
 
     parser = argparse.ArgumentParser(prog="mtg-deck-doctor", description="Manage the accounts of an MTG Deck Doctor server.")
     commands = parser.add_subparsers(dest="command", required=True)

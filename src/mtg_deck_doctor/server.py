@@ -13,12 +13,15 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 
+from mtg_deck_doctor import auth
 from mtg_deck_doctor.api import app as api_app
+from mtg_deck_doctor.hardening import SecurityHeadersMiddleware
 
 DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
 app = FastAPI(title="MTG Deck Doctor", docs_url=None, redoc_url=None, openapi_url=None)
 app.mount("/api", api_app)
+app.add_middleware(SecurityHeadersMiddleware, is_https=auth.is_https)
 
 # The page shell must never be served from a cache, or a new build isn't picked up. The files in
 # /assets have a content hash in their names, so those can be kept for good.
@@ -32,7 +35,10 @@ def front_end(path: str) -> FileResponse:
     /decks/abc or /search/results opens the app, which then shows that route."""
     if not (DIST / "index.html").is_file():
         raise HTTPException(status_code=503, detail="The front end isn't built. Run `npm run build` in frontend/.")
-    target = (DIST / path).resolve()
+    try:
+        target = (DIST / path).resolve()
+    except (ValueError, OSError):  # A path with a NUL byte in it, or one the system can't read.
+        raise HTTPException(status_code=404, detail="Not found.")
     if path and target.is_file() and DIST.resolve() in target.parents:
         return FileResponse(target, headers=_FOREVER if target.parent.name == "assets" else _NO_CACHE)
     # A path that looks like a file but isn't there is a missing file, not a route of the app.

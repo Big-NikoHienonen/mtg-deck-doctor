@@ -15,6 +15,7 @@ for this card", which is a lie.
 """
 
 import json
+import re
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -64,7 +65,18 @@ def _get(url: str, params: dict | None = None) -> httpx.Response:
     return httpx.get(url, params=params, headers=API_HEADERS, timeout=15)
 
 
+# A Scryfall card id is a UUID. It becomes part of a URL path, so nothing else is let through.
+_SCRYFALL_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+
+
+def is_scryfall_id(value: str) -> bool:
+    return bool(_SCRYFALL_ID.fullmatch(value))
+
+
 def get_rulings(card_id: str) -> list[dict] | None:
+    if not is_scryfall_id(card_id):
+        return None
+
     def fetch() -> list[dict]:
         response = _get(f"https://api.scryfall.com/cards/{card_id}/rulings")
         response.raise_for_status()

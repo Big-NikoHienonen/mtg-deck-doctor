@@ -39,7 +39,8 @@ def fresh(*accounts: tuple[str, str], open_mode: bool = False) -> TestClient:
         os.environ[auth.AUTH_ENV] = "off"
     for email, password in accounts:
         users.create_user(email, password)
-    auth.throttle = auth.LoginThrottle()
+    auth.throttle = auth.AttemptLimiter(auth.MAX_FAILURES, auth.FAILURE_WINDOW_SECONDS, overall=auth.MAX_FAILURES_OVERALL)
+    auth.deck_misses = auth.AttemptLimiter(auth.MAX_DECK_MISSES, auth.FAILURE_WINDOW_SECONDS)
     return TestClient(api.app, raise_server_exceptions=False)
 
 
@@ -176,9 +177,9 @@ check("then the client is turned away with a wait time", locked.status_code == 4
 check("...even with the right password", c.post("/auth/login", json={"email": OWNER[0], "password": OWNER[1]}).status_code == 429)
 check("...and routes stay closed", c.get("/decks").status_code == 401)
 
-t = auth.LoginThrottle()
+t = auth.AttemptLimiter(auth.MAX_FAILURES, auth.FAILURE_WINDOW_SECONDS)
 for _ in range(auth.MAX_FAILURES):
-    t.record_failure("a", now=100.0)
+    t.record("a", now=100.0)
 check("a lockout is for that client only", t.retry_after("a", now=101.0) > 0 and t.retry_after("b", now=101.0) == 0)
 check("...and ends when the window has passed", t.retry_after("a", now=100.0 + auth.FAILURE_WINDOW_SECONDS + 1) == 0)
 c = fresh(OWNER)

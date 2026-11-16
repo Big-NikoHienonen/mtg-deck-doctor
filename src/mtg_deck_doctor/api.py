@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, StrictBool
 
 from mtg_deck_doctor.card_cache import get_card_info, get_card_info_batch, peek_card_info
-from mtg_deck_doctor.card_details import get_printings, get_rulings
+from mtg_deck_doctor.card_details import get_printings, get_rulings, is_scryfall_id
 from mtg_deck_doctor.collection import (
     add_many_to_collection,
     add_to_collection,
@@ -44,6 +44,7 @@ from mtg_deck_doctor.deck import (
 )
 from mtg_deck_doctor import ai_errors, auth, game_changers, usage, users
 from mtg_deck_doctor.auth import public
+from mtg_deck_doctor.hardening import BodyLimitMiddleware
 from mtg_deck_doctor.edhrec import get_commander_includes, peek_commander_includes
 from mtg_deck_doctor.usage import AiBudgetExceeded
 from mtg_deck_doctor.new_cards import (
@@ -98,7 +99,9 @@ async def require_owner(request: Request) -> None:
     auth.current_user.set(user)
 
 
-app = FastAPI(title="MTG Deck Doctor", dependencies=[Depends(require_owner)])
+# The interactive docs and the schema list every route, so they stay off. The routes are in this file.
+app = FastAPI(title="MTG Deck Doctor", dependencies=[Depends(require_owner)], docs_url=None, redoc_url=None, openapi_url=None)
+app.add_middleware(BodyLimitMiddleware)
 
 # Every deck edit retries on its own when it loses a race (see
 # deck.retry_on_conflict), so this only reaches the client when a deck was
@@ -161,8 +164,16 @@ def usage_endpoint(days: int = 7, recent: int = 50) -> dict:
     }
 
 
+# Largest values the routes accept. A card name is at most about 150 characters; the rest are generous.
+NAME_MAX = 200
+CHAT_MESSAGE_MAX = 8000
+MAX_COPIES = 99  # No deck holds more than this many of one card.
+MAX_LIST = 1000  # Names in one request, for a deck's list or a page of search results.
+MAX_COLLECTION_IMPORT = 20_000
+
+
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(max_length=CHAT_MESSAGE_MAX)
 
 
 class ChatResponse(BaseModel):
@@ -171,11 +182,11 @@ class ChatResponse(BaseModel):
 
 
 class CardNameRequest(BaseModel):
-    name: str
+    name: str = Field(max_length=NAME_MAX)
 
 
 class DeckNameRequest(BaseModel):
-    name: str
+    name: str = Field(max_length=100)
 
 
 class SuggestionsResponse(BaseModel):
@@ -184,22 +195,22 @@ class SuggestionsResponse(BaseModel):
 
 
 class ReviewCandidate(BaseModel):
-    cut: str
-    add: str
+    cut: str = Field(max_length=NAME_MAX)
+    add: str = Field(max_length=NAME_MAX)
     # Why the statistics flagged the cut card, in words — context for the review.
-    flag: str = ""
+    flag: str = Field(default="", max_length=1000)
 
 
 class HealthMetricIn(BaseModel):
-    label: str
+    label: str = Field(max_length=200)
     count: int
-    target: list[int]
-    cards: list[str] = []
+    target: list[int] = Field(max_length=10)
+    cards: list[str] = Field(default=[], max_length=MAX_LIST)
 
 
 class ReviewCutsRequest(BaseModel):
-    candidates: list[ReviewCandidate]
-    health: list[HealthMetricIn] = []
+    candidates: list[ReviewCandidate] = Field(max_length=200)
+    health: list[HealthMetricIn] = Field(default=[], max_length=50)
 
 
 class CutsResponse(BaseModel):
@@ -208,13 +219,13 @@ class CutsResponse(BaseModel):
 
 
 class SwapRequest(BaseModel):
-    remove: str
-    add: str
+    remove: str = Field(max_length=NAME_MAX)
+    add: str = Field(max_length=NAME_MAX)
 
 
 class BulkCardRequest(BaseModel):
-    name: str
-    count: int
+    name: str = Field(max_length=NAME_MAX)
+    count: int = Field(le=MAX_COPIES)
 
 
 class BulkAddResponse(BaseModel):
@@ -335,9 +346,16 @@ class PublicDeck(BaseModel):
     updated_at: str
 
 
-def _public_deck_or_404(deck_id: str) -> Deck:
+def _public_deck_or_404(deck_id: str, request: Request) -> Deck:
+    """The deck at a public address. A client that keeps asking for addresses with no deck behind them is
+    guessing, and is turned away for a while, so an address can't be found by trying them all."""
+    client = auth.client_key(request)
+    wait = auth.deck_misses.retry_after(client)
+    if wait:
+        raise HTTPException(status_code=429, detail="Too many addresses with no deck. Try again later.", headers={"Retry-After": str(wait)})
     deck = DECK_ID_PATTERN.fullmatch(deck_id) and load_deck(deck_id)
     if not deck:
+        auth.deck_misses.record(client)
         raise HTTPException(status_code=404, detail="There's no deck at this address.")
     return deck
 
@@ -346,8 +364,8 @@ def _public_deck_or_404(deck_id: str) -> Deck:
 # ever with the list and with data on the cards in it. Everything else about a deck needs the sign-in.
 @app.get("/public/decks/{deck_id}")
 @public
-def get_public_deck_endpoint(deck_id: str) -> PublicDeck:
-    deck = _public_deck_or_404(deck_id)
+def get_public_deck_endpoint(deck_id: str, request: Request) -> PublicDeck:
+    deck = _public_deck_or_404(deck_id, request)
     return PublicDeck(
         name=deck.name,
         commander=deck.commander,
@@ -365,10 +383,6 @@ def get_public_deck_endpoint(deck_id: str) -> PublicDeck:
 class LoginRequest(BaseModel):
     email: str = Field(max_length=users.MAX_EMAIL_LENGTH)
     password: str = Field(max_length=users.MAX_PASSWORD_LENGTH)
-
-
-def _client(request: Request) -> str:
-    return request.client.host if request.client else "unknown"
 
 
 @app.get("/auth/status")
@@ -394,8 +408,10 @@ def login_endpoint(body: LoginRequest, request: Request, response: Response) -> 
         raise HTTPException(status_code=503, detail=NO_ACCOUNT)
     if state == "off":
         return {"ok": True, "email": None}
-    client = _client(request)
-    wait = auth.throttle.retry_after(client)
+    client = auth.client_key(request)
+    # The attempt is counted before the password is checked, so a burst of simultaneous guesses can't all
+    # get past the limit. A right password gives it back.
+    wait = auth.throttle.begin(client)
     if wait:
         raise HTTPException(status_code=429, detail="Too many attempts. Try again later.", headers={"Retry-After": str(wait)})
     user = users.find_user(body.email)
@@ -403,9 +419,8 @@ def login_endpoint(body: LoginRequest, request: Request, response: Response) -> 
     # and the answer is the same: nothing says which of the two was wrong.
     checked = users.verify_password(body.password, user.password_hash if user else users.dummy_hash())
     if user is None or not checked:
-        auth.throttle.record_failure(client)
         raise HTTPException(status_code=401, detail="Incorrect email or password.")
-    auth.throttle.reset(client)
+    auth.throttle.forgive(client)
     users.record_login(user, body.password)
     response.set_cookie(
         auth.COOKIE,
@@ -413,14 +428,20 @@ def login_endpoint(body: LoginRequest, request: Request, response: Response) -> 
         max_age=auth.SESSION_SECONDS,
         httponly=True,
         samesite="lax",
-        secure=request.url.scheme == "https",
+        secure=auth.is_https(request.scope),
     )
     return {"ok": True, "email": user.email}
 
 
 @app.post("/auth/logout")
 @public
-def logout_endpoint(response: Response) -> dict:
+def logout_endpoint(request: Request, response: Response) -> dict:
+    """Signs out. The cookie is a signed statement and holds nothing the server can take back, so the account's
+    session version goes up, which ends every cookie it has, including a copy of this one. That signs the
+    account out of its other browsers too."""
+    user = auth.session_user(request.cookies.get(auth.COOKIE)) if auth.mode() == "on" else None
+    if user is not None:
+        users.revoke_sessions(user)
     response.delete_cookie(auth.COOKIE, httponly=True, samesite="lax")
     return {"ok": True}
 
@@ -518,12 +539,12 @@ def add_cards_bulk_endpoint(deck_id: str, request: BulkCardRequest) -> BulkAddRe
 
 
 class ImportEntry(BaseModel):
-    name: str
-    quantity: int
+    name: str = Field(max_length=NAME_MAX)
+    quantity: int = Field(ge=1, le=MAX_COPIES)
 
 
 class ImportCardsRequest(BaseModel):
-    entries: list[ImportEntry]
+    entries: list[ImportEntry] = Field(max_length=MAX_LIST)
 
 
 class ImportCardsResponse(BaseModel):
@@ -857,7 +878,7 @@ class CollectionResponse(BaseModel):
 
 
 class BulkCollectionRequest(BaseModel):
-    names: list[str]
+    names: list[str] = Field(max_length=MAX_COLLECTION_IMPORT)
 
 
 @app.get("/collection")
@@ -885,7 +906,7 @@ class CardInfoResponse(BaseModel):
 
 
 class CardInfoBatchRequest(BaseModel):
-    names: list[str]
+    names: list[str] = Field(max_length=MAX_LIST)
     refresh: bool = False
 
 
@@ -911,6 +932,8 @@ def get_card_info_endpoint(name: str, refresh: bool = False) -> CardInfoResponse
 # ("this card has no rulings"). The frontend renders the two differently.
 @app.get("/cards/rulings")
 def get_rulings_endpoint(id: str) -> dict:
+    if not is_scryfall_id(id):
+        raise HTTPException(status_code=422, detail="id must be a card id.")
     return {"rulings": get_rulings(id)}
 
 
@@ -930,17 +953,17 @@ def get_card_info_batch_endpoint(request: CardInfoBatchRequest) -> CardInfoBatch
 # the server's to spend, and a lookup here is a request to Scryfall when the card isn't cached yet.
 @app.post("/public/decks/{deck_id}/cards")
 @public
-def get_public_card_info_endpoint(deck_id: str, request: CardInfoBatchRequest) -> CardInfoBatchResponse:
-    deck = _public_deck_or_404(deck_id)
+def get_public_card_info_endpoint(deck_id: str, body: CardInfoBatchRequest, request: Request) -> CardInfoBatchResponse:
+    deck = _public_deck_or_404(deck_id, request)
     in_deck = set(deck.cards) | ({deck.commander} if deck.commander else set())
-    result = get_card_info_batch([name for name in request.names if name in in_deck])
+    result = get_card_info_batch([name for name in body.names if name in in_deck])
     return CardInfoBatchResponse(**result)
 
 
 @app.get("/public/decks/{deck_id}/rulings")
 @public
-def get_public_rulings_endpoint(deck_id: str, id: str) -> dict:
-    deck = _public_deck_or_404(deck_id)
+def get_public_rulings_endpoint(deck_id: str, id: str, request: Request) -> dict:
+    deck = _public_deck_or_404(deck_id, request)
     names = set(deck.cards) | ({deck.commander} if deck.commander else set())
     ids = {info["id"] for info in (peek_card_info(name) for name in names) if info and info.get("id")}
     if id not in ids:

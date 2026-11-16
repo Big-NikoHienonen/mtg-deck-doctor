@@ -46,6 +46,7 @@ cp .env.example .env
 | --- | --- |
 | `ANTHROPIC_API_KEY` | Your Anthropic API key. Required for everything the Doctor does. |
 | `MTG_DECK_DOCTOR_AUTH` | Optional. `off` runs the app with no sign-in while there is no account, which `./dev-backend.sh` does. An account turns the sign-in on whatever this says. See [Sign in and public decks](#sign-in-and-public-decks). |
+| `MTG_DECK_DOCTOR_PROXY` | Optional. `fly` when the app runs behind Fly.io's proxy, which `fly.toml` sets. The app then reads the visitor's address and scheme from the proxy's headers. Without it those headers are ignored, because anyone can send them. |
 | `ANTHROPIC_MODEL` | Optional. The model to use. Defaults to `claude-sonnet-5`. |
 | `AI_DAILY_BUDGET_USD` | Optional, and off unless set. The most the Doctor may spend in a UTC day, as estimated from token counts. See [AI usage and limits](#ai-usage-and-limits). |
 | `ANTHROPIC_CHAT_EFFORT` | Optional. How hard the model thinks in chat: `low`, `medium`, `high` or `max`. Defaults to `medium`. |
@@ -122,14 +123,32 @@ fly ssh console -C "ls /app/data"
 
 Don't copy `data/session_secret` or `data/users`. The server makes its own.
 
-Then make your account on the Machine. The first account takes the decks that have no owner, so make it after the copy. `fly ssh console` opens a shell on the Machine, and the command asks for a password of at least 10 characters:
+The server runs as the unprivileged user `app`, and the copy is made as root, so hand the files to `app`:
 
 ```bash
-fly ssh console
-mtg-deck-doctor create-user you@example.com
+fly ssh console -C "chown -R app:app /app/data"
+```
+
+Then make your account on the Machine. The first account takes the decks that have no owner, so make it after the copy. Open a shell as `app`, and the command asks for a password of at least 10 characters:
+
+```bash
+fly ssh console -u app
+/app/.venv/bin/mtg-deck-doctor create-user you@example.com
 ```
 
 Open the app with `fly open` and sign in. A deck's address is `https://<app>.fly.dev/decks/<id>`.
+
+Check that Fly passes the visitor's address through as the app expects, which the README can't know in advance. Send nine wrong sign-ins, each claiming a different address in `Fly-Client-IP`. The limit across all addresses (30 in 10 minutes) holds whatever Fly does, but the per-address limit (8) only works if Fly sets that header itself:
+
+```bash
+for i in 1 2 3 4 5 6 7 8 9; do
+  curl -s -o /dev/null -w "%{http_code} " -H "Fly-Client-IP: 198.51.100.$i" \
+    -H 'Content-Type: application/json' -d '{"email":"x@example.com","password":"wrong wrong wrong"}' \
+    https://<app>.fly.dev/api/auth/login
+done; echo
+```
+
+Eight `401`s and then a `429` mean the app counted all nine as one visitor, which is what you want. Nine `401`s mean a client can set `Fly-Client-IP`, so the per-address limit can be bypassed and only the overall limit protects the sign-in. Change `client_key` in `auth.py` to read another header. Wait ten minutes before you sign in, since these count against the overall limit.
 
 `fly.toml` caps the Doctor at `AI_DAILY_BUDGET_USD = "5"` dollars a day. To change it, edit the number and run `fly deploy --ha=false` again. The cap is an estimate from token counts, so also set a spend limit on the key's workspace in the Anthropic console.
 
@@ -163,7 +182,13 @@ On a copy of a 41-message conversation, these changes cut what each call sends f
 The backend is closed to everyone, except for a deck's list. Once an account exists, every route refuses a browser that hasn't signed in, except the login routes and the public deck routes below. With no account, every route refuses every request (503) unless `MTG_DECK_DOCTOR_AUTH=off` says to run open, which `./dev-backend.sh` does. An account always turns the sign-in on, whatever `MTG_DECK_DOCTOR_AUTH` says, so a stray setting can't leave a server open.
 
 - **Sign in.** Anyone who isn't signed in sees a landing page with the app's name and a short description, and nothing else, at every address except a deck's. The **Sign in** link in the app bar opens the sign-in page (`/login`), which brings you back to the page you were on once you're in. It asks for an email and a password, with a show/hide toggle for the password and a Caps Lock warning. A wrong email and a wrong password get the same answer, and take the same time. The backend then sets a signed, HTTP-only cookie that lasts 30 days and is marked secure over HTTPS. **Sign out** is in the app bar.
-- **Wrong passwords are throttled.** After 8 failures from one address in 10 minutes, that address gets a 429 until the window moves on. Behind a reverse proxy, `--proxy-headers` (which `serve.sh` passes) makes the address the visitor's, not the proxy's.
+- **Sign-in attempts are limited.** Each attempt counts before the password is checked, so a burst can't all get through. One address gets 8 attempts in 10 minutes and then a 429 until the window moves on, and all addresses together get 30. The overall limit holds even if an attacker makes up addresses; it also means a flood of guesses can lock you out of the sign-in page for up to 10 minutes. A browser that is already signed in isn't affected. A right password gives that address its attempts back. An IPv6 visitor counts as one address per `/64`. Behind Fly.io, `MTG_DECK_DOCTOR_PROXY=fly` makes the address the one Fly's proxy saw; behind a proxy on the same machine, `--proxy-headers` (which `serve.sh` passes) does that.
+- **Signing out ends every cookie the account has.** The cookie is a signed statement the server can't take back, so signing out raises the account's session version, which also ends a copy of the cookie and signs the account out of its other browsers. The cookie lasts 30 days otherwise.
+- **Deck addresses can't be guessed.** A new deck's id is 16 random hex digits (64 bits). Ids made before that have 8 and still work. A client that asks for 20 public addresses with no deck behind them in 10 minutes gets a 429 on every public deck route until the window moves on.
+- **Requests and inputs have limits.** A request body over 64 KB on a route a stranger can reach, or 2 MB on any other, gets a 413 without being read in full. A card name is at most 200 characters, a deck name 100, a chat message 8,000, a count or quantity 99, and a list 1,000 entries (20,000 for a collection import). `api.py` names them at the top of the request models.
+- **Security headers.** Every response carries a Content-Security-Policy that allows scripts only from this server and the page's own hosts (Scryfall's API and images, Google Fonts), `X-Frame-Options: DENY`, `nosniff`, a referrer policy and a permissions policy, and HSTS over HTTPS. `hardening.py` holds the list. If the page needs a new outside host, add it to the policy there.
+- **No API docs.** `/docs`, `/redoc` and the OpenAPI schema are off.
+- **The server runs as `app`, not root.** The image's entrypoint hands `/app/data` to `app` and drops root before it starts. `mtg-deck-doctor` run as root acts as the owner of `data/` for the same reason.
 - **A new route is closed by default.** Mark a route `@public` (in `auth.py`) to open it. `tests/test_auth.py` fails if the list of open routes changes.
 
 ### Accounts
@@ -218,7 +243,9 @@ cd frontend && npx tsc -b && npm run lint
 | `src/mtg_deck_doctor/api.py` | The FastAPI app and its routes. |
 | `Dockerfile`, `fly.toml` | The image, and its Fly.io config. |
 | `src/mtg_deck_doctor/server.py` | Serves the API under `/api` and the built front end, for running the app on one address. |
-| `src/mtg_deck_doctor/auth.py` | Signing in: the session cookie, who is signed in on a request, and the throttle. |
+| `src/mtg_deck_doctor/auth.py` | Signing in: the session cookie, who is signed in on a request, and the limits on guessing. |
+| `src/mtg_deck_doctor/hardening.py` | The request size limit and the security headers. |
+| `docker-entrypoint.sh` | Starts the container as root only to hand `data/` to `app`, then drops root. |
 | `src/mtg_deck_doctor/users.py`, `cli.py` | The accounts (files, password hashes), and the commands that make them. |
 | `src/mtg_deck_doctor/tool_loop.py` | Every model call, with prompts, the chat's tools, and checks on what the model returns. |
 | `src/mtg_deck_doctor/edhrec.py`, `card_cache.py`, `game_changers.py` | EDHREC and Scryfall clients with local caches. |

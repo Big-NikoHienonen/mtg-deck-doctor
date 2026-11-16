@@ -37,6 +37,12 @@ async function safeFetch(input: string | URL, init?: RequestInit): Promise<Respo
   }
 }
 
+// The backend's own explanation of a refusal. A request it found malformed (a 422) comes with a list of
+// problems instead of a sentence, so that gets the caller's wording.
+function detailOf(body: { detail?: unknown } | null, fallback: string): string {
+  return typeof body?.detail === "string" ? body.detail : fallback;
+}
+
 // Asks the backend whether the model can be reached right now, without sending
 // anyone's message. Clears the page-wide problem if it can. Returns null when
 // it can, otherwise why not.
@@ -48,7 +54,7 @@ export async function checkAi(): Promise<string | null> {
     return null;
   }
   const body = await res.json().catch(() => null);
-  return body?.detail ?? "The Doctor still isn't available.";
+  return detailOf(body, "The Doctor still isn't available.");
 }
 
 export type MessageBlock =
@@ -100,13 +106,13 @@ export async function createDeck(options?: { name?: string; commander?: string }
   return res.json();
 }
 
+// The decks without their chat history: `messages` is empty on every one. Open a deck (getDeck) for its conversation.
 export async function listDecks(): Promise<Deck[]> {
   const res = await safeFetch(`${API_BASE}/decks`);
   if (!res || !res.ok) throw new Error("failed to list decks");
   return res.json();
 }
 
-// The decks without their chat history: `messages` is empty on every one. Open a deck (getDeck) for its conversation.
 export async function deleteDeck(id: string): Promise<void> {
   const res = await safeFetch(`${API_BASE}/decks/${id}`, { method: "DELETE" });
   if (!res || !res.ok) throw new Error("failed to delete deck");
@@ -204,7 +210,7 @@ export async function sendMessage(id: string, message: string): Promise<{ reply:
     // Model failures are already recorded page-wide by safeFetch; the message is
     // the backend's own explanation of what went wrong.
     const body = await res.json().catch(() => null);
-    throw new Error(body?.detail ?? "That message didn't go through.");
+    throw new Error(detailOf(body, "That message didn't go through."));
   }
   return res.json();
 }
@@ -217,7 +223,7 @@ async function postCardName(url: string, name: string): Promise<Deck> {
   });
   if (!res || !res.ok) {
     const body = await res?.json().catch(() => null);
-    throw new Error(body?.detail ?? "That didn't work.");
+    throw new Error(detailOf(body, "That didn't work."));
   }
   return res.json();
 }
@@ -240,7 +246,7 @@ export async function removeCard(deckId: string, name: string): Promise<Deck> {
   const res = await safeFetch(url, { method: "DELETE" });
   if (!res || !res.ok) {
     const body = await res?.json().catch(() => null);
-    throw new Error(body?.detail ?? "That didn't work.");
+    throw new Error(detailOf(body, "That didn't work."));
   }
   return res.json();
 }
@@ -256,7 +262,7 @@ export async function swapCards(deckId: string, remove: string, add: string): Pr
   });
   if (!res || !res.ok) {
     const body = await res?.json().catch(() => null);
-    throw new Error(body?.detail ?? "Couldn't swap those cards.");
+    throw new Error(detailOf(body, "Couldn't swap those cards."));
   }
   return res.json();
 }
@@ -271,7 +277,7 @@ export async function unkeepCard(deckId: string, name: string): Promise<Deck> {
   const res = await safeFetch(url, { method: "DELETE" });
   if (!res || !res.ok) {
     const body = await res?.json().catch(() => null);
-    throw new Error(body?.detail ?? "That didn't work.");
+    throw new Error(detailOf(body, "That didn't work."));
   }
   return res.json();
 }
@@ -286,7 +292,7 @@ export async function bulkAddCards(deckId: string, name: string, count: number):
   });
   if (!res || !res.ok) {
     const body = await res?.json().catch(() => null);
-    throw new Error(body?.detail ?? "That didn't work.");
+    throw new Error(detailOf(body, "That didn't work."));
   }
   return res.json();
 }
@@ -312,7 +318,7 @@ export async function importCards(
   });
   if (!res || !res.ok) {
     const body = await res?.json().catch(() => null);
-    throw new Error(body?.detail ?? "That didn't work.");
+    throw new Error(detailOf(body, "That didn't work."));
   }
   return res.json();
 }
@@ -342,7 +348,7 @@ export async function refreshSuggestions(deckId: string): Promise<Suggestions> {
   const res = await safeFetch(`${API_BASE}/decks/${deckId}/suggestions/refresh`, { method: "POST" });
   if (!res || !res.ok) {
     const body = await res?.json().catch(() => null);
-    throw new Error(body?.detail ?? "Couldn't get suggestions. Try again.");
+    throw new Error(detailOf(body, "Couldn't get suggestions. Try again."));
   }
   const data = await res.json();
   return data.suggestions;
@@ -399,7 +405,7 @@ export async function reviewCuts(deckId: string, request: CutReviewRequest): Pro
   });
   if (!res || !res.ok) {
     const body = await res?.json().catch(() => null);
-    throw new Error(body?.detail ?? "Couldn't get the Doctor's review. Try again.");
+    throw new Error(detailOf(body, "Couldn't get the Doctor's review. Try again."));
   }
   const data = await res.json();
   return data.cuts;
@@ -501,7 +507,7 @@ export async function refreshNewCommanders(): Promise<NewCommanders> {
   const res = await safeFetch(`${API_BASE}/commanders/new/refresh`, { method: "POST" });
   if (!res || !res.ok) {
     const body = await res?.json().catch(() => null);
-    throw new Error(body?.detail ?? "Couldn't look through the new commanders. Try again.");
+    throw new Error(detailOf(body, "Couldn't look through the new commanders. Try again."));
   }
   const data = await res.json();
   return data.commanders;
@@ -513,7 +519,7 @@ export async function refreshDiscoveries(deckId: string): Promise<DeckDiscoverie
   const res = await safeFetch(`${API_BASE}/decks/${deckId}/discoveries/refresh`, { method: "POST" });
   if (!res || !res.ok) {
     const body = await res?.json().catch(() => null);
-    throw new Error(body?.detail ?? "Couldn't look through the new cards. Try again.");
+    throw new Error(detailOf(body, "Couldn't look through the new cards. Try again."));
   }
   const data = await res.json();
   return data.discoveries;

@@ -11,9 +11,9 @@ import json
 import os
 import random
 import re
+import secrets
 import threading
 import time
-import uuid
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime, timezone
@@ -30,7 +30,7 @@ def _now() -> str:
 
 @dataclass
 class Deck:
-    id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
+    id: str = field(default_factory=lambda: secrets.token_hex(DECK_ID_BYTES))
     name: str | None = None
     commander: str | None = None
     commander_color_identity: list[str] = field(default_factory=list)
@@ -55,8 +55,13 @@ class Deck:
 
 
 # What a deck's id looks like. A deck page is public to read, so a route that takes an id from
-# a stranger checks it against this before it touches the disk.
+# a stranger checks it against this before it touches the disk. New ids are 16 hex digits (64 bits), too
+# many to guess. Ids made before that were 8, and still work.
+DECK_ID_BYTES = 8
 DECK_ID_PATTERN = re.compile(r"[0-9a-f]{8,32}")
+
+# What may be part of a deck's file name. Anything else (a slash, a dot, a NUL) never reaches the disk.
+_FILE_SAFE_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
 
 
 def _path(deck_id: str) -> Path:
@@ -77,6 +82,8 @@ def create_deck(owner_id: str | None = None) -> Deck:
 
 
 def load_deck(deck_id: str) -> Deck | None:
+    if not _FILE_SAFE_ID.fullmatch(deck_id):
+        return None
     path = _path(deck_id)
     if not path.exists():
         return None
@@ -227,6 +234,8 @@ def claim_unowned_decks(owner_id: str) -> int:
 
 
 def delete_deck(deck_id: str) -> bool:
+    if not _FILE_SAFE_ID.fullmatch(deck_id):
+        return False
     path = _path(deck_id)
     if not path.exists():
         return False

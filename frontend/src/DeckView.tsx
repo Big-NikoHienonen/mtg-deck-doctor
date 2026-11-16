@@ -815,6 +815,7 @@ export default function DeckView() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Ask the Doctor..."
+              maxLength={8000} // The backend refuses a longer message (CHAT_MESSAGE_MAX in api.py).
               style={inputStyle}
               disabled={!deck || sending}
             />
