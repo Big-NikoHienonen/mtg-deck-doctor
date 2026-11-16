@@ -14,7 +14,7 @@ import re
 import secrets
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime, timezone
 from functools import wraps
@@ -44,7 +44,8 @@ class Deck:
     # deck's page sees these, so a deck looks the same to a visitor as it does to its owner.
     printings: dict[str, dict] = field(default_factory=dict)
     # The id of the user whose deck this is (see users.py). Decks made before there were accounts have
-    # none, until the first account is made and takes them (claim_unowned_decks). While the app runs open
+    # none, until the first account is made and takes them (claim_unowned_decks), and neither do decks whose
+    # owner has no account on this machine, such as decks copied from another one. While the app runs open
     # with no account, every deck is visible and new ones get none.
     owner_id: str | None = None
     updated_at: str = field(default_factory=_now)
@@ -213,16 +214,20 @@ def duplicate_deck(deck_id: str) -> Deck | None:
     return copy
 
 
-def claim_unowned_decks(owner_id: str) -> int:
-    """Gives every deck that has no owner to `owner_id`, and returns how many. Each deck keeps its
-    "updated" time, since nothing about it changed, and its version goes up, so a copy held by a running
-    server is refused on its next save and reloaded rather than undoing this."""
+def claim_unowned_decks(owner_id: str, accounts: Collection[str] | None = None) -> int:
+    """Gives `owner_id` every deck that has no owner, and returns how many. With `accounts` (the ids of
+    every account on this machine), it also takes a deck whose owner isn't one of them: a deck copied
+    from another machine carries that machine's account id, so here it has no owner either. A deck owned
+    by an account here is left alone. Each deck keeps its "updated" time, since nothing about it changed,
+    and its version goes up, so a copy held by a running server is refused on its next save and reloaded
+    rather than undoing this."""
     claimed = 0
     with _save_lock:
         paths = sorted(DECKS_DIR.glob("*.json")) if DECKS_DIR.exists() else []
         for path in paths:
             data = json.loads(path.read_text())
-            if data.get("owner_id"):
+            owner = data.get("owner_id")
+            if owner and (accounts is None or owner in accounts):
                 continue
             data["owner_id"] = owner_id
             data["version"] = data.get("version", 0) + 1

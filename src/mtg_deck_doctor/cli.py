@@ -1,10 +1,13 @@
 """Account commands, run on the machine that holds the data (see users.py for why there is no sign-up).
 
-    mtg-deck-doctor create-user EMAIL       make an account; the first one takes the decks that have no owner
+    mtg-deck-doctor create-user EMAIL       make an account; the first one takes the decks that have no owner here
     mtg-deck-doctor set-password EMAIL      a new password, which signs the user out everywhere
     mtg-deck-doctor revoke-sessions EMAIL   sign the user out everywhere, keeping the password
-    mtg-deck-doctor claim-decks EMAIL       give every deck that has no owner to this account
+    mtg-deck-doctor claim-decks EMAIL       give every deck that has no owner here to this account
     mtg-deck-doctor list-users
+
+A deck "has no owner here" when it has none, or when its owner is an account that doesn't exist on this
+machine, as with decks copied from your own computer to a server.
 
 The password is asked for with a prompt that doesn't show it, and never taken from the command line,
 where it would stay in the shell's history. `--password-stdin` reads it from standard input instead, for a
@@ -55,6 +58,10 @@ def _read_password(from_stdin: bool) -> str:
     return first
 
 
+def _account_ids() -> set[str]:
+    return {user.id for user in users.list_users()}
+
+
 def _user_or_exit(email: str) -> users.User:
     user = users.find_user(email)
     if user is None:
@@ -70,7 +77,7 @@ def _create_user(args: argparse.Namespace) -> None:
         raise SystemExit(str(err))
     print(f"Made the account for {user.email}.")
     if first:
-        count = claim_unowned_decks(user.id)
+        count = claim_unowned_decks(user.id, _account_ids())
         print("1 existing deck now belongs to it." if count == 1 else f"{count} existing decks now belong to it.")
 
 
@@ -91,8 +98,8 @@ def _revoke_sessions(args: argparse.Namespace) -> None:
 
 def _claim_decks(args: argparse.Namespace) -> None:
     user = _user_or_exit(args.email)
-    count = claim_unowned_decks(user.id)
-    print(f"{count} deck{'' if count == 1 else 's'} with no owner now belong{'s' if count == 1 else ''} to {user.email}.")
+    count = claim_unowned_decks(user.id, _account_ids())
+    print(f"{count} deck{'' if count == 1 else 's'} with no owner here now belong{'s' if count == 1 else ''} to {user.email}.")
 
 
 def _list_users(_: argparse.Namespace) -> None:

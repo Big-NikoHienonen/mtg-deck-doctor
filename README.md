@@ -129,7 +129,7 @@ The server runs as the unprivileged user `app`, and the copy is made as root, so
 fly ssh console -C "chown -R app:app /app/data"
 ```
 
-Then make your account on the Machine. The first account takes the decks that have no owner, so make it after the copy. Open a shell as `app`, and the command asks for a password of at least 10 characters:
+Then make your account on the Machine. The first account takes every deck that has no owner here, which includes the decks you copied, since each carries your local account's id and that account doesn't exist on the server. So make it after the copy. Open a shell as `app`, and the command asks for a password of at least 10 characters:
 
 ```bash
 fly ssh console -u app
@@ -203,10 +203,10 @@ On Fly.io, run the same command in `fly ssh console`. The other commands:
 
 | Command | What it does |
 | --- | --- |
-| `create-user EMAIL` | Makes an account. The first account takes every deck that has no owner. |
+| `create-user EMAIL` | Makes an account. The first account takes every deck that has no owner here: none, or an owner with no account on this machine. |
 | `set-password EMAIL` | Sets a new password, which also signs the user out of every browser. |
 | `revoke-sessions EMAIL` | Signs the user out of every browser, keeping the password. |
-| `claim-decks EMAIL` | Gives every deck that has no owner to the account. |
+| `claim-decks EMAIL` | Gives every deck that has no owner here to the account. A deck owned by an account here is left alone. |
 | `list-users` | Lists the accounts, with when each was made and last signed in. |
 
 `create-user` and `set-password` also take `--password-stdin`, which reads the password from standard input, for a script.
