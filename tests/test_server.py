@@ -48,6 +48,7 @@ check("...and the API still answers", c.get("/api/auth/status").status_code == 2
 
 server.DIST = dist
 res = c.get("/")
+check("a HEAD request for the page works too, for uptime monitors", c.head("/").status_code == 200 and c.head("/decks/abc").status_code == 200 and c.head("/missing.js").status_code == 404)
 check("the home page is the page shell, never cached", res.status_code == 200 and "shell" in res.text and res.headers["cache-control"] == "no-cache")
 for route in ["/decks/aaaa1111", "/admin", "/search/results"]:
     check(f"a link straight to {route.split('/')[1]} opens the shell", c.get(route).text == res.text)

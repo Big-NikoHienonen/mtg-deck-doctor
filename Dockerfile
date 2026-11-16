@@ -34,7 +34,7 @@ COPY --from=frontend /build/frontend/dist ./frontend/dist
 
 # The server runs as `app`, not root, so a flaw in it can't change the image. The entrypoint starts as
 # root only to hand the data volume to `app` (a new volume is owned by root), then drops root.
-RUN useradd --system --create-home --uid 10001 --shell /bin/sh app \
+RUN useradd --create-home --user-group --uid 10001 --shell /bin/sh app \
     && mkdir -p /app/data \
     && chown app:app /app/data
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh

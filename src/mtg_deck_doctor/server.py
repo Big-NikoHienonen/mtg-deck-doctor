@@ -29,7 +29,7 @@ _NO_CACHE = {"Cache-Control": "no-cache"}
 _FOREVER = {"Cache-Control": "public, max-age=31536000, immutable"}
 
 
-@app.get("/{path:path}", include_in_schema=False)
+@app.api_route("/{path:path}", methods=["GET", "HEAD"], include_in_schema=False)
 def front_end(path: str) -> FileResponse:
     """A built file if there is one, and the page shell for everything else, so that a link straight to
     /decks/abc or /search/results opens the app, which then shows that route."""
