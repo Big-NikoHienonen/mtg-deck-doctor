@@ -7,6 +7,7 @@ calls and these direct manual-edit endpoints.
 import logging
 import threading
 import time
+from dataclasses import replace
 from datetime import datetime, timezone
 
 import anthropic
@@ -281,7 +282,9 @@ def create_deck_endpoint(request: NewDeckRequest | None = None) -> Deck:
 
 @app.get("/decks")
 def list_decks_endpoint() -> list[Deck]:
-    return _my_decks()
+    """The user's decks, without their chat history. The conversation is most of what a deck weighs, and
+    only the deck's own page reads it (`GET /decks/{id}` still has it)."""
+    return [replace(deck, messages=[]) for deck in _my_decks()]
 
 
 @app.get("/decks/{deck_id}")

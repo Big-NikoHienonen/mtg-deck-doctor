@@ -106,6 +106,7 @@ export async function listDecks(): Promise<Deck[]> {
   return res.json();
 }
 
+// The decks without their chat history: `messages` is empty on every one. Open a deck (getDeck) for its conversation.
 export async function deleteDeck(id: string): Promise<void> {
   const res = await safeFetch(`${API_BASE}/decks/${id}`, { method: "DELETE" });
   if (!res || !res.ok) throw new Error("failed to delete deck");

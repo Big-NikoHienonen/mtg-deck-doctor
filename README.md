@@ -105,7 +105,7 @@ fly deploy --ha=false
 
 The app is closed until it has an account, so it shows only the landing page and refuses everything else. That is the state to copy your data into.
 
-To bring your local decks along, copy them to the volume once the Machine is running. Decks and your collection can't be rebuilt, and the saved AI results (`suggestions`, `cuts`, `discoveries`) cost tokens to regenerate. The caches rebuild by themselves:
+To bring your local data along, copy it to the volume once the Machine is running. Decks and your collection can't be rebuilt, and the saved AI results (`suggestions`, `cuts`, `discoveries`, `new_commanders.json`) cost tokens to regenerate. The caches (about 12 MB) do rebuild by themselves, but from empty, so the first visitors to a deck would wait on Scryfall and EDHREC. Copying them starts the app warm:
 
 ```bash
 fly ssh sftp put -R data/decks /app/data/decks
@@ -113,6 +113,10 @@ fly ssh sftp put data/collection.json /app/data/collection.json
 fly ssh sftp put -R data/suggestions /app/data/suggestions
 fly ssh sftp put -R data/cuts /app/data/cuts
 fly ssh sftp put -R data/discoveries /app/data/discoveries
+fly ssh sftp put data/new_commanders.json /app/data/new_commanders.json
+for f in card_cache printings_cache rulings_cache edhrec_cache new_cards_cache game_changers_cache; do
+  fly ssh sftp put data/$f.json /app/data/$f.json
+done
 fly ssh console -C "ls /app/data"
 ```
 
@@ -127,7 +131,7 @@ mtg-deck-doctor create-user you@example.com
 
 Open the app with `fly open` and sign in. A deck's address is `https://<app>.fly.dev/decks/<id>`.
 
-To cap the Doctor's spend, uncomment `AI_DAILY_BUDGET_USD` in `fly.toml`, set a number, and run `fly deploy --ha=false` again. Also set a spend limit on the key in the Anthropic console.
+`fly.toml` caps the Doctor at `AI_DAILY_BUDGET_USD = "5"` dollars a day. To change it, edit the number and run `fly deploy --ha=false` again. The cap is an estimate from token counts, so also set a spend limit on the key's workspace in the Anthropic console.
 
 To run the image locally, with Docker running, then make an account in the running container:
 
