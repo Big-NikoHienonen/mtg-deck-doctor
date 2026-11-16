@@ -43,6 +43,10 @@ class Deck:
     # to show it (set name, prices, finishes, whether it is used as the foil). Anyone who opens the
     # deck's page sees these, so a deck looks the same to a visitor as it does to its owner.
     printings: dict[str, dict] = field(default_factory=dict)
+    # The id of the user whose deck this is (see users.py). Decks made before there were accounts have
+    # none, until the first account is made and takes them (claim_unowned_decks). While the app runs open
+    # with no account, every deck is visible and new ones get none.
+    owner_id: str | None = None
     updated_at: str = field(default_factory=_now)
     # Counts saves. save_deck only writes over the version it was loaded at,
     # so a copy that's gone stale can't silently overwrite newer changes.
@@ -66,8 +70,8 @@ def _deck_from_json(text: str) -> Deck:
     return Deck(**{key: value for key, value in json.loads(text).items() if key in known})
 
 
-def create_deck() -> Deck:
-    deck = Deck()
+def create_deck(owner_id: str | None = None) -> Deck:
+    deck = Deck(owner_id=owner_id)
     save_deck(deck)
     return deck
 
@@ -196,9 +200,30 @@ def duplicate_deck(deck_id: str) -> Deck | None:
         cards=list(original.cards),
         keep=list(original.keep),
         printings={name: dict(choice) for name, choice in original.printings.items()},
+        owner_id=original.owner_id,
     )
     save_deck(copy)
     return copy
+
+
+def claim_unowned_decks(owner_id: str) -> int:
+    """Gives every deck that has no owner to `owner_id`, and returns how many. Each deck keeps its
+    "updated" time, since nothing about it changed, and its version goes up, so a copy held by a running
+    server is refused on its next save and reloaded rather than undoing this."""
+    claimed = 0
+    with _save_lock:
+        paths = sorted(DECKS_DIR.glob("*.json")) if DECKS_DIR.exists() else []
+        for path in paths:
+            data = json.loads(path.read_text())
+            if data.get("owner_id"):
+                continue
+            data["owner_id"] = owner_id
+            data["version"] = data.get("version", 0) + 1
+            tmp = path.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(data, indent=2))
+            os.replace(tmp, path)
+            claimed += 1
+    return claimed
 
 
 def delete_deck(deck_id: str) -> bool:

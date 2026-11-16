@@ -13,6 +13,7 @@ os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
 from fastapi.testclient import TestClient
 
 import mtg_deck_doctor.deck as D
+import mtg_deck_doctor.users as users
 import mtg_deck_doctor.tool_loop as T
 from mtg_deck_doctor import api
 
@@ -40,8 +41,8 @@ def lookup(name: str) -> dict:
 
 
 T.lookup_card = lookup
-# These tests aren't about the login (see test_auth.py), so they run open, whatever password .env sets.
-os.environ.pop("MTG_DECK_DOCTOR_PASSWORD", None)
+# These tests aren't about the login (see test_auth.py), so they run open: no accounts, and AUTH=off.
+users.USERS_DIR = Path(tempfile.mkdtemp()) / "users"  # no accounts, whatever the real data folder holds
 os.environ["MTG_DECK_DOCTOR_AUTH"] = "off"
 c = TestClient(api.app, raise_server_exceptions=False)
 count = lambda: len(D.list_decks())

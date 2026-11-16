@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 
 import anthropic
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, StrictBool
 
@@ -40,7 +41,7 @@ from mtg_deck_doctor.deck import (
     set_printings,
     unkeep_card,
 )
-from mtg_deck_doctor import ai_errors, auth, game_changers, usage
+from mtg_deck_doctor import ai_errors, auth, game_changers, usage, users
 from mtg_deck_doctor.auth import public
 from mtg_deck_doctor.edhrec import get_commander_includes, peek_commander_includes
 from mtg_deck_doctor.usage import AiBudgetExceeded
@@ -74,22 +75,26 @@ from mtg_deck_doctor.tool_loop import (
 logger = logging.getLogger(__name__)
 
 
-def require_owner(request: Request) -> None:
-    """Runs before every route. A route marked `@public` is open to anyone; every other route needs the
-    owner's session cookie (see auth.py), so a route added later is closed until someone opens it."""
+NO_ACCOUNT = "No account exists yet. Make one with `mtg-deck-doctor create-user <email>` on the server."
+
+
+async def require_owner(request: Request) -> None:
+    """Runs before every route. A route marked `@public` is open to anyone; every other route needs a
+    signed-in user's session cookie (see auth.py), so a route added later is closed until someone opens it.
+    The user is noted for the route to come (auth.current_user), which is how a route knows whose decks
+    to show. The file reads run off the event loop, and the note is made on it, so the route sees it."""
     route = request.scope.get("route")
     if route is not None and getattr(route.endpoint, "public", False):
         return
-    state = auth.mode()
+    state = await run_in_threadpool(auth.mode)
     if state == "off":
         return
     if state == "unconfigured":
-        raise HTTPException(
-            status_code=503,
-            detail=f"No owner password is set. Set {auth.PASSWORD_ENV} in the backend's environment and restart it.",
-        )
-    if not auth.valid_session(request.cookies.get(auth.COOKIE)):
+        raise HTTPException(status_code=503, detail=NO_ACCOUNT)
+    user = await run_in_threadpool(auth.session_user, request.cookies.get(auth.COOKIE))
+    if user is None:
         raise HTTPException(status_code=401, detail="Sign in to use the app.")
+    auth.current_user.set(user)
 
 
 app = FastAPI(title="MTG Deck Doctor", dependencies=[Depends(require_owner)])
@@ -218,9 +223,21 @@ class BulkAddResponse(BaseModel):
     error: str | None = None
 
 
+def _owns(deck: Deck) -> bool:
+    """Whether the signed-in user may see and change this deck. Everyone may when the app runs open."""
+    user = auth.current_user.get()
+    return user is None or deck.owner_id == user.id
+
+
+def _my_decks() -> list[Deck]:
+    return [deck for deck in list_decks() if _owns(deck)]
+
+
 def _get_deck_or_404(deck_id: str) -> Deck:
+    """The deck, if it is the signed-in user's. Someone else's deck is a 404, the same as no deck, so
+    an id says nothing about whether it exists."""
     deck = load_deck(deck_id)
-    if deck is None:
+    if deck is None or not _owns(deck):
         raise HTTPException(status_code=404, detail=f"no deck with id {deck_id!r}")
     return deck
 
@@ -249,7 +266,8 @@ class NewDeckRequest(BaseModel):
 def create_deck_endpoint(request: NewDeckRequest | None = None) -> Deck:
     """A new deck, optionally named and with its commander already set. A commander that can't lead
     is a 400 and leaves no deck behind."""
-    deck = create_deck()
+    user = auth.current_user.get()
+    deck = create_deck(owner_id=user.id if user else None)
     try:
         if request and request.commander.strip():
             _raise_if_error(set_commander(deck, request.commander.strip()))
@@ -263,7 +281,7 @@ def create_deck_endpoint(request: NewDeckRequest | None = None) -> Deck:
 
 @app.get("/decks")
 def list_decks_endpoint() -> list[Deck]:
-    return list_decks()
+    return _my_decks()
 
 
 @app.get("/decks/{deck_id}")
@@ -273,6 +291,7 @@ def get_deck_endpoint(deck_id: str) -> Deck:
 
 @app.delete("/decks/{deck_id}")
 def delete_deck_endpoint(deck_id: str) -> dict:
+    _get_deck_or_404(deck_id)
     if not delete_deck(deck_id):
         raise HTTPException(status_code=404, detail=f"no deck with id {deck_id!r}")
     return {"deleted": deck_id}
@@ -280,6 +299,7 @@ def delete_deck_endpoint(deck_id: str) -> dict:
 
 @app.post("/decks/{deck_id}/duplicate")
 def duplicate_deck_endpoint(deck_id: str) -> Deck:
+    _get_deck_or_404(deck_id)
     copy = duplicate_deck(deck_id)
     if copy is None:
         raise HTTPException(status_code=404, detail=f"no deck with id {deck_id!r}")
@@ -340,7 +360,8 @@ def get_public_deck_endpoint(deck_id: str) -> PublicDeck:
 
 
 class LoginRequest(BaseModel):
-    password: str = Field(max_length=200)
+    email: str = Field(max_length=users.MAX_EMAIL_LENGTH)
+    password: str = Field(max_length=users.MAX_PASSWORD_LENGTH)
 
 
 def _client(request: Request) -> str:
@@ -350,13 +371,15 @@ def _client(request: Request) -> str:
 @app.get("/auth/status")
 @public
 def auth_status_endpoint(request: Request) -> dict:
-    """What the page needs to know before it shows anything: whether the app asks for a password, and
-    whether this browser has entered it."""
+    """What the page needs to know before it shows anything: whether the app asks for a sign-in, whether
+    there is an account to sign in to, and who this browser is signed in as."""
     state = auth.mode()
+    user = auth.session_user(request.cookies.get(auth.COOKIE)) if state == "on" else None
     return {
         "required": state != "off",
         "configured": state != "unconfigured",
-        "signed_in": state == "off" or auth.valid_session(request.cookies.get(auth.COOKIE)),
+        "signed_in": state == "off" or user is not None,
+        "email": user.email if user else None,
     }
 
 
@@ -365,26 +388,31 @@ def auth_status_endpoint(request: Request) -> dict:
 def login_endpoint(body: LoginRequest, request: Request, response: Response) -> dict:
     state = auth.mode()
     if state == "unconfigured":
-        raise HTTPException(status_code=503, detail=f"No owner password is set. Set {auth.PASSWORD_ENV} in the backend's environment and restart it.")
+        raise HTTPException(status_code=503, detail=NO_ACCOUNT)
     if state == "off":
-        return {"ok": True}
+        return {"ok": True, "email": None}
     client = _client(request)
     wait = auth.throttle.retry_after(client)
     if wait:
         raise HTTPException(status_code=429, detail="Too many attempts. Try again later.", headers={"Retry-After": str(wait)})
-    if not auth.password_ok(body.password):
+    user = users.find_user(body.email)
+    # An email with no account is checked against a hash nobody has the password to, so it takes as long,
+    # and the answer is the same: nothing says which of the two was wrong.
+    checked = users.verify_password(body.password, user.password_hash if user else users.dummy_hash())
+    if user is None or not checked:
         auth.throttle.record_failure(client)
-        raise HTTPException(status_code=401, detail="Incorrect password.")
+        raise HTTPException(status_code=401, detail="Incorrect email or password.")
     auth.throttle.reset(client)
+    users.record_login(user, body.password)
     response.set_cookie(
         auth.COOKIE,
-        auth.make_session(),
+        auth.make_session(user),
         max_age=auth.SESSION_SECONDS,
         httponly=True,
         samesite="lax",
         secure=request.url.scheme == "https",
     )
-    return {"ok": True}
+    return {"ok": True, "email": user.email}
 
 
 @app.post("/auth/logout")
@@ -690,7 +718,7 @@ def refresh_new_commanders_endpoint(force: bool = False) -> dict:
         if latest is None:
             raise HTTPException(status_code=502, detail="Couldn't reach Scryfall to find the newest sets. Try again.")
         codes = _codes(latest)
-        decks = [d for d in list_decks() if d.commander]
+        decks = [d for d in _my_decks() if d.commander]
 
         stored = load_new_commanders()
         if stored and not force and _present_new_commanders(stored, codes, decks)["current"]:
@@ -750,7 +778,7 @@ def _deck_title(deck: Deck) -> str:
 def hub_endpoint() -> dict:
     latest = latest_sets()
     decks, candidates = [], []
-    for deck in list_decks():
+    for deck in _my_decks():
         includes = peek_commander_includes(deck.commander) if deck.commander else {"available": False}
         by_name = {c["name"]: c for c in includes["cards"]} if includes.get("available") else {}
         commander_info = peek_card_info(deck.commander) if deck.commander else None
@@ -800,7 +828,7 @@ def hub_endpoint() -> dict:
     candidates.sort(key=lambda o: (o["rank_in_deck"], -(o["add_inclusion"] or 0)))
     return {
         "latest_sets": latest,
-        "commanders": _present_new_commanders(load_new_commanders(), _codes(latest), [d for d in list_decks() if d.commander]),
+        "commanders": _present_new_commanders(load_new_commanders(), _codes(latest), [d for d in _my_decks() if d.commander]),
         "orders": candidates[:MAX_ORDERS],
         "more_swaps": max(0, len(candidates) - MAX_ORDERS),
         "decks": decks,

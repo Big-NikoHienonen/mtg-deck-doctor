@@ -11,6 +11,8 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 import mtg_deck_doctor.deck as D
+import mtg_deck_doctor.users as users
+from mtg_deck_doctor import auth
 from mtg_deck_doctor import server
 
 results: list[bool] = []
@@ -30,7 +32,9 @@ dist = tmp / "dist"
 (tmp / "secret.txt").write_text("outside the front end")
 
 D.DECKS_DIR = tmp / "decks"
-os.environ.pop("MTG_DECK_DOCTOR_PASSWORD", None)  # Whatever .env sets.
+users.USERS_DIR = tmp / "users"  # no accounts, whatever the real data folder holds
+auth.SECRET_PATH = tmp / "session_secret"
+users.SCRYPT_N = 2**12
 os.environ["MTG_DECK_DOCTOR_AUTH"] = "off"
 c = TestClient(server.app, raise_server_exceptions=False)
 
@@ -62,13 +66,12 @@ check("the API is under /api", c.get("/api/decks").status_code == 200)
 check("the API isn't also at the root, where the front end's routes are", c.get("/decks").text == res.text or "shell" in c.get("/decks").text)
 check("an unknown API path is the API's own 404", c.get("/api/nothing").status_code == 404 and "shell" not in c.get("/api/nothing").text)
 
-os.environ["MTG_DECK_DOCTOR_PASSWORD"] = "correct horse"
+users.create_user("owner@example.com", "correct horse battery")
 check("the login still guards the API from here", c.get("/api/decks").status_code == 401)
 check("...and the page shell needs no login", c.get("/").status_code == 200)
-signed_in = c.post("/api/auth/login", json={"password": "correct horse"})
+signed_in = c.post("/api/auth/login", json={"email": "owner@example.com", "password": "correct horse battery"})
 check("signing in works under /api", signed_in.status_code == 200 and c.get("/api/decks").status_code == 200)
 check("...with a cookie for the whole address", "path=/" in signed_in.headers["set-cookie"].lower())
-os.environ.pop("MTG_DECK_DOCTOR_PASSWORD")
 
 print(f"\n{sum(results)}/{len(results)} passed")
 raise SystemExit(0 if all(results) else 1)

@@ -13,6 +13,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 import mtg_deck_doctor.deck as D
+import mtg_deck_doctor.users as users
 import mtg_deck_doctor.tool_loop as T
 from mtg_deck_doctor import api
 
@@ -25,8 +26,8 @@ def check(name: str, ok: object, detail: str = "") -> None:
     print(("PASS " if ok else "FAIL ") + name + (f"  [{detail}]" if detail else ""))
 
 
-# These tests aren't about the login (see test_auth.py), so they run open, whatever password .env sets.
-os.environ.pop("MTG_DECK_DOCTOR_PASSWORD", None)
+# These tests aren't about the login (see test_auth.py), so they run open: no accounts, and AUTH=off.
+users.USERS_DIR = Path(tempfile.mkdtemp()) / "users"  # no accounts, whatever the real data folder holds
 os.environ["MTG_DECK_DOCTOR_AUTH"] = "off"
 c = TestClient(api.app, raise_server_exceptions=False)
 

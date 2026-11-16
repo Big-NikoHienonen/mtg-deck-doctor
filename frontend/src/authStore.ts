@@ -11,12 +11,14 @@ export type AuthState = {
   // The backend couldn't be reached.
   unreachable: boolean;
   required: boolean;
-  // False when the backend has no password set, so there is nothing to sign in with.
+  // False when the backend has no account yet, so there is nothing to sign in to.
   configured: boolean;
   signedIn: boolean;
+  // Who this browser is signed in as. Null when it isn't, or when the backend asks for no sign-in.
+  email: string | null;
 };
 
-let state: AuthState = { checked: false, unreachable: false, required: false, configured: true, signedIn: false };
+let state: AuthState = { checked: false, unreachable: false, required: false, configured: true, signedIn: false, email: null };
 const listeners = new Set<() => void>();
 
 function set(next: Partial<AuthState>) {
@@ -41,22 +43,23 @@ export async function refreshAuth(): Promise<void> {
     set({ checked: true, unreachable: true });
     return;
   }
-  set({ checked: true, unreachable: false, required: status.required, configured: status.configured, signedIn: status.signed_in });
+  set({ checked: true, unreachable: false, required: status.required, configured: status.configured, signedIn: status.signed_in, email: status.email });
 }
 
 // Null once signed in, otherwise what to tell the person.
-export async function signIn(password: string): Promise<string | null> {
-  const problem = await logIn(password);
-  if (problem === null) set({ signedIn: true });
-  return problem;
+export async function signIn(email: string, password: string): Promise<string | null> {
+  const result = await logIn(email, password);
+  if ("error" in result) return result.error;
+  set({ signedIn: true, email: result.email });
+  return null;
 }
 
 export async function signOut(): Promise<void> {
   await logOut();
-  set({ signedIn: false });
+  set({ signedIn: false, email: null });
 }
 
-// The backend refused a request: the session ended, or the password was changed.
+// The backend refused a request: the session ended, or the user was signed out everywhere.
 onUnauthorized(() => {
-  if (state.required) set({ signedIn: false });
+  if (state.required) set({ signedIn: false, email: null });
 });

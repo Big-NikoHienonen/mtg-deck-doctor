@@ -1,6 +1,7 @@
 # The whole app in one image: the built front end, and the backend that serves it and the API.
 # Build:  docker build -t mtg-deck-doctor .
-# Run:    docker run -p 8080:8080 -e ANTHROPIC_API_KEY=... -e MTG_DECK_DOCTOR_PASSWORD=... -v mtg-data:/app/data mtg-deck-doctor
+# Run:    docker run -p 8080:8080 -e ANTHROPIC_API_KEY=... -v mtg-data:/app/data mtg-deck-doctor
+# Account: docker exec -it <container> mtg-deck-doctor create-user <email>
 
 # --- The front end ---------------------------------------------------------------------------------
 FROM node:22-slim AS frontend

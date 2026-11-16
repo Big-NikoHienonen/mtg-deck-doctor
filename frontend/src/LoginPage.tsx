@@ -17,6 +17,7 @@ function returnPath(state: unknown): string {
 export default function LoginPage() {
   const auth = useAuth();
   const { state } = useLocation();
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [reveal, setReveal] = useState(false);
   const [capsLock, setCapsLock] = useState(false);
@@ -29,10 +30,10 @@ export default function LoginPage() {
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!password || busy) return;
+    if (!email.trim() || !password || busy) return;
     setBusy(true);
     setProblem(null);
-    const result = await signIn(password);
+    const result = await signIn(email, password);
     if (result !== null) {
       setProblem(result);
       setBusy(false);
@@ -54,8 +55,26 @@ export default function LoginPage() {
         <h1>Sign in</h1>
         <p className="login-lede">Sign in to build and edit your decks.</p>
 
-        {/* Password managers save a password against a username, so there is one, out of sight. */}
-        <input className="login-visually-hidden" type="text" name="username" autoComplete="username" value="owner" readOnly tabIndex={-1} aria-hidden="true" />
+        <div className="login-field">
+          <label htmlFor="login-email">Email</label>
+          <div className="login-input" data-invalid={problem !== null}>
+            <input
+              id="login-email"
+              type="email"
+              name="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="username"
+              inputMode="email"
+              autoCapitalize="none"
+              spellCheck={false}
+              autoFocus
+              maxLength={254}
+              aria-invalid={problem !== null}
+              aria-describedby={problem ? "login-error" : undefined}
+            />
+          </div>
+        </div>
 
         <div className="login-field">
           <label htmlFor="login-password">Password</label>
@@ -69,7 +88,6 @@ export default function LoginPage() {
               onKeyDown={trackCapsLock}
               onKeyUp={trackCapsLock}
               autoComplete="current-password"
-              autoFocus
               maxLength={200}
               aria-invalid={problem !== null}
               aria-describedby={problem ? "login-error" : undefined}
@@ -79,14 +97,15 @@ export default function LoginPage() {
             </button>
           </div>
           {capsLock && <p className="login-hint">Caps Lock is on.</p>}
-          {problem && (
-            <p id="login-error" className="login-error" role="alert">
-              {problem}
-            </p>
-          )}
         </div>
 
-        <button type="submit" className="login-submit" disabled={busy || !password}>
+        {problem && (
+          <p id="login-error" className="login-error" role="alert">
+            {problem}
+          </p>
+        )}
+
+        <button type="submit" className="login-submit" disabled={busy || !email.trim() || !password}>
           {busy ? "Signing in…" : "Sign in"}
         </button>
       </form>

@@ -45,7 +45,7 @@ cp .env.example .env
 | Variable | Description |
 | --- | --- |
 | `ANTHROPIC_API_KEY` | Your Anthropic API key. Required for everything the Doctor does. |
-| `MTG_DECK_DOCTOR_PASSWORD` | The owner's password. Required wherever anyone but you can reach the backend. `./dev-backend.sh` runs without it. See [Sign in and public decks](#sign-in-and-public-decks). |
+| `MTG_DECK_DOCTOR_AUTH` | Optional. `off` runs the app with no sign-in while there is no account, which `./dev-backend.sh` does. An account turns the sign-in on whatever this says. See [Sign in and public decks](#sign-in-and-public-decks). |
 | `ANTHROPIC_MODEL` | Optional. The model to use. Defaults to `claude-sonnet-5`. |
 | `AI_DAILY_BUDGET_USD` | Optional, and off unless set. The most the Doctor may spend in a UTC day, as estimated from token counts. See [AI usage and limits](#ai-usage-and-limits). |
 | `ANTHROPIC_CHAT_EFFORT` | Optional. How hard the model thinks in chat: `low`, `medium`, `high` or `max`. Defaults to `medium`. |
@@ -73,7 +73,7 @@ Open http://localhost:5173. The front end calls the backend at `/api`, and Vite 
 
 The backend can serve the whole app on one address: the API under `/api`, and the built front end for every other path. One address means the login cookie is first-party, there are no cross-origin requests, and the app works behind any host or tunnel with no extra settings.
 
-Set `MTG_DECK_DOCTOR_PASSWORD` in `.env` or the environment, then run:
+Make an account first (see [Accounts](#accounts)), then run:
 
 ```bash
 ./serve.sh
@@ -91,10 +91,10 @@ The `Dockerfile` builds the front end and runs the backend, which serves it and 
 fly launch --no-deploy --copy-config --ha=false
 ```
 
-Set the two secrets. Use a password of its own, not the one in your local `.env`:
+Set the API key as a secret:
 
 ```bash
-fly secrets set ANTHROPIC_API_KEY=<your key> MTG_DECK_DOCTOR_PASSWORD=<a new password>
+fly secrets set ANTHROPIC_API_KEY=<your key>
 ```
 
 Deploy. The first deploy creates the volume:
@@ -103,7 +103,7 @@ Deploy. The first deploy creates the volume:
 fly deploy --ha=false
 ```
 
-Open the app with `fly open`, and sign in with the new password. A deck's address is then `https://<app>.fly.dev/decks/<id>`.
+The app is closed until it has an account, so it shows only the landing page and refuses everything else. That is the state to copy your data into.
 
 To bring your local decks along, copy them to the volume once the Machine is running. Decks and your collection can't be rebuilt, and the saved AI results (`suggestions`, `cuts`, `discoveries`) cost tokens to regenerate. The caches rebuild by themselves:
 
@@ -116,15 +116,25 @@ fly ssh sftp put -R data/discoveries /app/data/discoveries
 fly ssh console -C "ls /app/data"
 ```
 
-Don't copy `data/session_secret`. The server makes its own.
+Don't copy `data/session_secret` or `data/users`. The server makes its own.
+
+Then make your account on the Machine. The first account takes the decks that have no owner, so make it after the copy. `fly ssh console` opens a shell on the Machine, and the command asks for a password of at least 10 characters:
+
+```bash
+fly ssh console
+mtg-deck-doctor create-user you@example.com
+```
+
+Open the app with `fly open` and sign in. A deck's address is `https://<app>.fly.dev/decks/<id>`.
 
 To cap the Doctor's spend, uncomment `AI_DAILY_BUDGET_USD` in `fly.toml`, set a number, and run `fly deploy --ha=false` again. Also set a spend limit on the key in the Anthropic console.
 
-To run the image locally, with Docker running:
+To run the image locally, with Docker running, then make an account in the running container:
 
 ```bash
 docker build -t mtg-deck-doctor .
-docker run -p 8080:8080 -e ANTHROPIC_API_KEY=<your key> -e MTG_DECK_DOCTOR_PASSWORD=<a password> -v mtg-data:/app/data mtg-deck-doctor
+docker run -d --name mtg-deck-doctor -p 8080:8080 -e ANTHROPIC_API_KEY=<your key> -v mtg-data:/app/data mtg-deck-doctor
+docker exec -it mtg-deck-doctor mtg-deck-doctor create-user you@example.com
 ```
 
 ## AI usage and limits
@@ -146,12 +156,36 @@ On a copy of a 41-message conversation, these changes cut what each call sends f
 
 ## Sign in and public decks
 
-The backend is closed to everyone but you, except for a deck's list. With `MTG_DECK_DOCTOR_PASSWORD` set, every route refuses a browser that hasn't signed in, except the login routes and the public deck routes below. Without a password, every route refuses every request (503) unless `MTG_DECK_DOCTOR_AUTH=off` says to run open, which `./dev-backend.sh` does. A password that is set always wins, so you can try the login locally by putting one in `.env`.
+The backend is closed to everyone, except for a deck's list. Once an account exists, every route refuses a browser that hasn't signed in, except the login routes and the public deck routes below. With no account, every route refuses every request (503) unless `MTG_DECK_DOCTOR_AUTH=off` says to run open, which `./dev-backend.sh` does. An account always turns the sign-in on, whatever `MTG_DECK_DOCTOR_AUTH` says, so a stray setting can't leave a server open.
 
-- **Sign in.** Anyone who isn't signed in sees a landing page with the app's name and a short description, and nothing else, at every address except a deck's. The **Sign in** link in the app bar opens the sign-in page (`/login`), which brings you back to the page you were on once you're in. It has a show/hide toggle for the password and a Caps Lock warning. The password is checked on the backend, which then sets a signed, HTTP-only cookie that lasts 30 days and is marked secure over HTTPS. **Sign out** is in the app bar.
-- **Changing the password** signs every browser out. The cookie is signed with a key made from the password and a random secret in `data/session_secret`, which the backend creates on first use. Keep that file with `data/`.
+- **Sign in.** Anyone who isn't signed in sees a landing page with the app's name and a short description, and nothing else, at every address except a deck's. The **Sign in** link in the app bar opens the sign-in page (`/login`), which brings you back to the page you were on once you're in. It asks for an email and a password, with a show/hide toggle for the password and a Caps Lock warning. A wrong email and a wrong password get the same answer, and take the same time. The backend then sets a signed, HTTP-only cookie that lasts 30 days and is marked secure over HTTPS. **Sign out** is in the app bar.
 - **Wrong passwords are throttled.** After 8 failures from one address in 10 minutes, that address gets a 429 until the window moves on. Behind a reverse proxy, `--proxy-headers` (which `serve.sh` passes) makes the address the visitor's, not the proxy's.
 - **A new route is closed by default.** Mark a route `@public` (in `auth.py`) to open it. `tests/test_auth.py` fails if the list of open routes changes.
+
+### Accounts
+
+There is no sign-up page. You make an account on the machine that holds the data, with a command that asks for the password without showing it. It never takes the password as an argument, because that would stay in the shell's history. Locally:
+
+```bash
+uv run mtg-deck-doctor create-user you@example.com
+```
+
+On Fly.io, run the same command in `fly ssh console`. The other commands:
+
+| Command | What it does |
+| --- | --- |
+| `create-user EMAIL` | Makes an account. The first account takes every deck that has no owner. |
+| `set-password EMAIL` | Sets a new password, which also signs the user out of every browser. |
+| `revoke-sessions EMAIL` | Signs the user out of every browser, keeping the password. |
+| `claim-decks EMAIL` | Gives every deck that has no owner to the account. |
+| `list-users` | Lists the accounts, with when each was made and last signed in. |
+
+`create-user` and `set-password` also take `--password-stdin`, which reads the password from standard input, for a script.
+
+- **Passwords** are stored as salted scrypt hashes (`data/users/<id>.json`, readable by its owner only), never as text. The cost is kept with each hash, so it can be raised and an account's hash is upgraded at its next sign-in. A password needs at least 10 characters.
+- **The login cookie** holds the user's id, a session version, an expiry and a signature made with a random secret in `data/session_secret`, which the backend creates on first use. Raising the session version ends every cookie the user has. Keep the secret with `data/`.
+- **Each deck belongs to one account.** A signed-in user sees only their own decks, and another user's deck is a 404, the same as no deck. The public deck page is the one thing that reads any deck. While accounts exist, a deck with no owner belongs to no one until `claim-decks` gives it to one.
+- **Not per account yet:** your collection, the card caches and the Doctor's usage numbers are shared by every account.
 
 **Every deck's page is public to read.** Open `/decks/<id>` without signing in and you get the list, card details, rulings, stats and Export, and nothing else: no chat with the Doctor, no insights, no editing, no collection toggle, and no printing choices. Nothing a visitor can reach calls the model. Signed in, the same address is the whole deck page. The home page, search, your collection and Admin need the sign-in, so nobody can find a deck's address from the app. Send someone the address in your browser's address bar.
 
@@ -180,7 +214,8 @@ cd frontend && npx tsc -b && npm run lint
 | `src/mtg_deck_doctor/api.py` | The FastAPI app and its routes. |
 | `Dockerfile`, `fly.toml` | The image, and its Fly.io config. |
 | `src/mtg_deck_doctor/server.py` | Serves the API under `/api` and the built front end, for running the app on one address. |
-| `src/mtg_deck_doctor/auth.py` | The owner's login: the password check, the session cookie, and the throttle. |
+| `src/mtg_deck_doctor/auth.py` | Signing in: the session cookie, who is signed in on a request, and the throttle. |
+| `src/mtg_deck_doctor/users.py`, `cli.py` | The accounts (files, password hashes), and the commands that make them. |
 | `src/mtg_deck_doctor/tool_loop.py` | Every model call, with prompts, the chat's tools, and checks on what the model returns. |
 | `src/mtg_deck_doctor/edhrec.py`, `card_cache.py`, `game_changers.py` | EDHREC and Scryfall clients with local caches. |
 | `frontend/src/DeckView.tsx` | The deck page. |

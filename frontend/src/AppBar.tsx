@@ -8,7 +8,7 @@ import "./appbar.css";
 
 // The bar along the top of every page: the logo, which goes to the landing page, the places to go from
 // anywhere (My decks, My collection, Search cards, Admin), New deck, and the theme. New deck is a
-// window over whatever page you are on, so it lives here. Sign out shows when the backend asks for a password.
+// window over whatever page you are on, so it lives here. Sign out shows when the backend asks for a sign-in.
 // Someone who isn't signed in, looking at a deck or at the front door, gets the name, a Sign in link
 // (to the sign-in page, which brings them back here) and the theme, and nothing to go to. So does the moment before it is known whether this browser is
 // signed in.
@@ -49,7 +49,7 @@ export default function AppBar() {
               New deck
             </button>
             {auth.required && (
-              <button type="button" className="app-bar-link" onClick={() => signOut()}>
+              <button type="button" className="app-bar-link" onClick={() => signOut()} title={auth.email ? `Signed in as ${auth.email}` : undefined}>
                 Sign out
               </button>
             )}

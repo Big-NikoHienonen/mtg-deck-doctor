@@ -8,7 +8,7 @@ primary_region = "arn"
 
 [env]
   # Not secret, so it can live here. Set the daily spend limit for the Doctor, in US dollars, then
-  # redeploy. The API key and the login password are secrets: `fly secrets set` (see the README).
+  # redeploy. The API key is a secret: `fly secrets set` (see the README). Accounts are made on the Machine.
   # AI_DAILY_BUDGET_USD = "5"
 
 [http_service]

@@ -157,9 +157,9 @@ export async function getPublicDeck(deckId: string): Promise<PublicDeck | null> 
   return res.json();
 }
 
-export type AuthStatus = { required: boolean; configured: boolean; signed_in: boolean };
+export type AuthStatus = { required: boolean; configured: boolean; signed_in: boolean; email: string | null };
 
-// Whether the backend asks for a password, and whether this browser has entered it. Null when the
+// Whether the backend asks for a sign-in, and whether this browser has signed in. Null when the
 // backend can't be reached.
 export async function getAuthStatus(): Promise<AuthStatus | null> {
   const res = await safeFetch(`${API_BASE}/auth/status`);
@@ -167,22 +167,25 @@ export async function getAuthStatus(): Promise<AuthStatus | null> {
   return res.json();
 }
 
-// Null once signed in, otherwise what to tell the person.
-export async function logIn(password: string): Promise<string | null> {
+// Who it signed in (null when the backend asks for no sign-in), or what to tell the person.
+export type LoginResult = { email: string | null } | { error: string };
+
+export async function logIn(email: string, password: string): Promise<LoginResult> {
   const res = await safeFetch(`${API_BASE}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ password }),
+    body: JSON.stringify({ email, password }),
   });
-  if (!res) return "Couldn't reach the Deck Doctor backend. Is it running on port 8000?";
-  if (res.ok) return null;
-  if (res.status === 401) return "Incorrect password.";
+  if (!res) return { error: "Couldn't reach the Deck Doctor backend. Is it running on port 8000?" };
+  const body = await res.json().catch(() => null);
+  if (res.ok) return { email: typeof body?.email === "string" ? body.email : null };
+  if (res.status === 401) return { error: "Incorrect email or password." };
   if (res.status === 429) {
     const minutes = Math.max(1, Math.ceil(Number(res.headers.get("Retry-After")) / 60));
-    return `Too many attempts. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`;
+    return { error: `Too many attempts. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.` };
   }
-  const body = await res.json().catch(() => null);
-  return typeof body?.detail === "string" ? body.detail : "Couldn't sign in. Try again.";
+  if (res.status === 422) return { error: "Enter your email and password." };
+  return { error: typeof body?.detail === "string" ? body.detail : "Couldn't sign in. Try again." };
 }
 
 export async function logOut(): Promise<void> {
