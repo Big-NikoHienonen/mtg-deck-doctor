@@ -15,6 +15,7 @@ export default function CardSearchBox({ placeholder, submitLabel, onSubmit }: Pr
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<number | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
@@ -45,6 +46,8 @@ export default function CardSearchBox({ placeholder, submitLabel, onSubmit }: Pr
       setError(err instanceof Error ? err.message : "That didn't work.");
     } finally {
       setSubmitting(false);
+      // Keep the cursor in the box (clicking the button or a suggestion moves it), so cards can be added one after another.
+      inputRef.current?.focus();
     }
   }
 
@@ -73,13 +76,15 @@ export default function CardSearchBox({ placeholder, submitLabel, onSubmit }: Pr
         }}
         style={{ display: "flex", gap: 8 }}
       >
+        {/* readOnly, not disabled, while a card is being added: a disabled input loses focus. */}
         <input
+          ref={inputRef}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           style={inputStyle}
-          disabled={submitting}
+          readOnly={submitting}
         />
         <button type="submit" className="btn" style={buttonStyle} disabled={submitting || !value.trim()}>
           {submitLabel}
