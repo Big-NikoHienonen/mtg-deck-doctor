@@ -26,8 +26,8 @@ def wait_phrase(seconds: int) -> str:
 
 
 class RateLimitMiddleware:
-    """Counts every request against the address that made it, and answers 429 with a Retry-After once
-    that address is over its limit. `begin` takes the request's scope, counts the request, and returns 0 or
+    """Counts every request against whoever made it, and answers 429 with a Retry-After once they are over
+    their limit. `begin` takes the request's scope, counts the request, and returns 0 or
     how many seconds the address must wait. Files count too: a script that fetches the page over and over
     costs bandwidth, which is the one cost Fly.io doesn't bound."""
 
@@ -42,7 +42,7 @@ class RateLimitMiddleware:
         if wait:
             refusal = JSONResponse(
                 status_code=429,
-                content={"detail": f"Too many requests from your address. Try again in {wait_phrase(wait)}."},
+                content={"detail": f"Too many requests. Try again in {wait_phrase(wait)}."},
                 headers={"Retry-After": str(wait)},
             )
             return await refusal(scope, receive, send)

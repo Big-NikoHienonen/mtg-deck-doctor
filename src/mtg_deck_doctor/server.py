@@ -24,14 +24,8 @@ app = FastAPI(title="MTG Deck Doctor", docs_url=None, redoc_url=None, openapi_ur
 app.mount("/api", api_app)
 
 
-def _count_request(scope: Scope) -> int:
-    """Counts a request against its address in the hourly limit, and returns 0 or the seconds to wait. Looks
-    `auth.request_limiter` up on every call, so a limiter swapped in (by a test, say) is the one used."""
-    return auth.request_limiter.begin(auth.scope_client_key(scope))
-
-
 # The last middleware added is the outermost, so the security headers go on a 429 too.
-app.add_middleware(RateLimitMiddleware, begin=_count_request)
+app.add_middleware(RateLimitMiddleware, begin=auth.count_request)
 app.add_middleware(SecurityHeadersMiddleware, is_https=auth.is_https)
 
 # The page shell must never be served from a cache, or a new build isn't picked up. The files in

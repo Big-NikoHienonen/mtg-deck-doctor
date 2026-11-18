@@ -48,9 +48,11 @@ FAILURE_WINDOW_SECONDS = 600
 # or new commanders), so a single account can't spend the day's whole AI budget. A value of 0 or less
 # turns that limit off. They are set in the environment so a deploy can change them without a code change.
 REQUESTS_PER_HOUR_ENV = "MTG_DECK_DOCTOR_REQUESTS_PER_HOUR"
+ACCOUNT_REQUESTS_PER_HOUR_ENV = "MTG_DECK_DOCTOR_ACCOUNT_REQUESTS_PER_HOUR"
 AI_REQUESTS_PER_HOUR_ENV = "MTG_DECK_DOCTOR_AI_REQUESTS_PER_HOUR"
 DEFAULT_REQUESTS_PER_HOUR = 2000
-DEFAULT_AI_REQUESTS_PER_HOUR = 30
+DEFAULT_ACCOUNT_REQUESTS_PER_HOUR = 20_000
+DEFAULT_AI_REQUESTS_PER_HOUR = 100
 HOUR_SECONDS = 3600
 
 # Set to `fly` when the app runs behind Fly.io's proxy (fly.toml does). The proxy is then the only way in, so
@@ -102,9 +104,9 @@ def make_session(user: User, now: float | None = None) -> str:
     return f"{payload}.{_sign(payload)}"
 
 
-def session_user(value: str | None, now: float | None = None) -> User | None:
-    """The user a cookie belongs to, or None if it is missing, forged, expired, or from before the
-    user's sessions were last ended."""
+def _verified_session(value: str | None, now: float | None = None) -> tuple[str, int] | None:
+    """The (user id, session version) a cookie names, if it is well formed, signed by this server and not
+    expired. Nothing is looked up, so it costs no file read."""
     if not value:
         return None
     parts = value.split(".")
@@ -120,10 +122,26 @@ def session_user(value: str | None, now: float | None = None) -> User | None:
         signed = hmac.compare_digest(signature.encode(), _sign(f"{user_id}.{version}.{expires}").encode())
     except UnicodeEncodeError:
         return None
-    if not signed:
+    return (user_id, int(version)) if signed else None
+
+
+def signed_in_account(value: str | None, now: float | None = None) -> str | None:
+    """The id of the account a cookie was issued to, if the cookie is genuine and current. It doesn't check
+    that the account still exists or that the session wasn't ended since, which is `session_user`'s job, so
+    use it only where the answer decides how a request is counted and nothing it may see."""
+    session = _verified_session(value, now)
+    return session[0] if session else None
+
+
+def session_user(value: str | None, now: float | None = None) -> User | None:
+    """The user a cookie belongs to, or None if it is missing, forged, expired, or from before the
+    user's sessions were last ended."""
+    session = _verified_session(value, now)
+    if session is None:
         return None
+    user_id, version = session
     user = users.get_user(user_id)
-    if user is None or user.session_version != int(version):
+    if user is None or user.session_version != version:
         return None
     return user
 
@@ -320,9 +338,25 @@ class RequestLimiter:
 
 
 request_limiter = RequestLimiter(_env_limit(REQUESTS_PER_HOUR_ENV, DEFAULT_REQUESTS_PER_HOUR), HOUR_SECONDS)
+account_request_limiter = RequestLimiter(_env_limit(ACCOUNT_REQUESTS_PER_HOUR_ENV, DEFAULT_ACCOUNT_REQUESTS_PER_HOUR), HOUR_SECONDS)
 ai_limiter = RequestLimiter(_env_limit(AI_REQUESTS_PER_HOUR_ENV, DEFAULT_AI_REQUESTS_PER_HOUR), HOUR_SECONDS)
 
 
 def scope_client_key(scope: Scope) -> str:
     """`client_key` for a request that is still a bare ASGI scope, as it is in middleware."""
     return client_key(Request(scope))
+
+
+def count_request(scope: Scope) -> int:
+    """Counts a request in the hourly limit and returns 0 or the seconds to wait. A request with a genuine
+    sign-in cookie counts against its account, with a limit no person reaches (it stops a page stuck in a
+    loop, or a copied cookie). Any other request counts against its address, with the limit that stops a
+    stranger running up the bandwidth bill. Accounts are made by the owner, so the address limit never
+    applies to them: a household sharing one address can't lock the owner out.
+
+    A cookie that is genuine but ended (the password changed since) still counts against its account, so
+    the address limit can't be dodged with one, and the request is refused later anyway."""
+    account = signed_in_account(Request(scope).cookies.get(COOKIE))
+    if account is not None:
+        return account_request_limiter.begin(account)
+    return request_limiter.begin(scope_client_key(scope))

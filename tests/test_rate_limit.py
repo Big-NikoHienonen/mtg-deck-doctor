@@ -126,7 +126,7 @@ d = auth._env_limit("TEST_LIMIT", 5)
 os.environ.pop("TEST_LIMIT")
 e = auth._env_limit("TEST_LIMIT", 5)
 check("a limit is read from the environment, and the default is used when it is blank, junk or unset", (a, b, c_, d, e) == (75, 5, 5, 0, 5), str((a, b, c_, d, e)))
-check("the defaults are 2,000 requests and 30 model calls an hour", (auth.DEFAULT_REQUESTS_PER_HOUR, auth.DEFAULT_AI_REQUESTS_PER_HOUR) == (2000, 30))
+check("the defaults are 2,000 requests an address, 20,000 an account, and 100 model calls an hour", (auth.DEFAULT_REQUESTS_PER_HOUR, auth.DEFAULT_ACCOUNT_REQUESTS_PER_HOUR, auth.DEFAULT_AI_REQUESTS_PER_HOUR) == (2000, 20_000, 100))
 check("Fly's health check (every 30 seconds) uses a small part of an address's hour", 3600 / 30 <= auth.DEFAULT_REQUESTS_PER_HOUR / 10)
 
 # --- every request is counted against its address --------------------------------------------------------
@@ -174,6 +174,52 @@ auth.request_limiter = Limiter(2, 3600)
 client.get("/", headers=from_address("198.51.100.7"))
 client.get("/", headers=from_address("198.51.100.7"))
 check("the page works again for an address that waits out the answer", client.get("/", headers=from_address("198.51.100.7")).status_code == 429)
+os.environ.pop(auth.PROXY_ENV)
+
+# --- a signed-in request isn't held to the address limit -------------------------------------------------
+
+os.environ[auth.PROXY_ENV] = "fly"  # The sign-in is off (set above), so what counts here is the cookie alone.
+owner = users.create_user("owner@example.com", "a long enough password")
+friend = users.create_user("friend@example.com", "another long password")
+
+
+def signed_in_as(account: users.User, address: str) -> dict[str, str]:
+    return {"Cookie": f"{auth.COOKIE}={auth.make_session(account)}", "Fly-Client-IP": address}
+
+
+future = int(time.time()) + 3600
+ghost_payload = f"nobody.1.{future}"
+check("a genuine cookie names its account without a lookup", auth.signed_in_account(auth.make_session(owner)) == owner.id and auth.signed_in_account(f"{ghost_payload}.{auth._sign(ghost_payload)}") == "nobody")
+check("a forged, expired, malformed or missing cookie names no one", [auth.signed_in_account(v) for v in (f"{ghost_payload}.0000", auth.make_session(owner, now=0), "junk", "", None)] == [None] * 5)
+
+auth.request_limiter = Limiter(3, 3600)
+auth.account_request_limiter = Limiter(1000, 3600)
+signed = [client.get("/", headers=signed_in_as(owner, "198.51.100.20")).status_code for _ in range(10)]
+check("a signed-in address makes more requests than the address limit", signed == [200] * 10, str(signed))
+check("...and used none of the address's hour, so a stranger on it still gets in", [client.get("/", headers=from_address("198.51.100.20")).status_code for _ in range(4)] == [200, 200, 200, 429])
+check("...and a signed-in request still gets through once the address is out", client.get("/", headers=signed_in_as(owner, "198.51.100.20")).status_code == 200)
+
+auth.account_request_limiter = Limiter(4, 3600)
+codes = [client.get("/", headers=signed_in_as(owner, "198.51.100.21")).status_code for _ in range(6)]
+check("an account has its own, much larger limit, as a backstop", codes == [200] * 4 + [429] * 2, str(codes))
+check("...it follows the account to another address", client.get("/", headers=signed_in_as(owner, "203.0.113.5")).status_code == 429)
+check("...and another account isn't held by it", client.get("/", headers=signed_in_as(friend, "198.51.100.21")).status_code == 200)
+
+auth.request_limiter = Limiter(2, 3600)
+auth.account_request_limiter = Limiter(1000, 3600)
+forged = {"Cookie": f"{auth.COOKIE}={ghost_payload}.00ff", "Fly-Client-IP": "198.51.100.22"}
+expired = {"Cookie": f"{auth.COOKIE}={auth.make_session(owner, now=0)}", "Fly-Client-IP": "198.51.100.23"}
+check("a forged cookie is counted against the address, so it buys nothing", [client.get("/", headers=forged).status_code for _ in range(3)] == [200, 200, 429])
+check("...and so is an expired one", [client.get("/", headers=expired).status_code for _ in range(3)] == [200, 200, 429])
+
+stale = signed_in_as(friend, "198.51.100.24")
+users.revoke_sessions(friend)  # The cookie is still signed and in date, but the session it belongs to is over.
+auth.account_request_limiter = Limiter(2, 3600)
+check("a cookie whose session was ended still counts, against its account, not for free", [client.get("/", headers=stale).status_code for _ in range(3)] == [200, 200, 429])
+check("...and leaves the address's own count alone", [client.get("/", headers=from_address("198.51.100.24")).status_code for _ in range(3)] == [200, 200, 429])
+
+auth.account_request_limiter = Limiter(0, 3600)
+check("an account limit of 0 turns it off", all(client.get("/", headers=signed_in_as(owner, "198.51.100.25")).status_code == 200 for _ in range(50)))
 os.environ.pop(auth.PROXY_ENV)
 
 # --- model calls are counted against the account ---------------------------------------------------------
