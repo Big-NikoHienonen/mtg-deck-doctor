@@ -42,6 +42,17 @@ MAX_FAILURES = 8
 MAX_FAILURES_OVERALL = 30
 FAILURE_WINDOW_SECONDS = 600
 
+# Volume limits, per hour. One address may make this many requests of any kind, files included: a page
+# load is about ten and a long session a few hundred, so this stops a script and not a person. One
+# account may start this many model calls (a chat message, a refresh of suggestions, cuts, new cards
+# or new commanders), so a single account can't spend the day's whole AI budget. A value of 0 or less
+# turns that limit off. They are set in the environment so a deploy can change them without a code change.
+REQUESTS_PER_HOUR_ENV = "MTG_DECK_DOCTOR_REQUESTS_PER_HOUR"
+AI_REQUESTS_PER_HOUR_ENV = "MTG_DECK_DOCTOR_AI_REQUESTS_PER_HOUR"
+DEFAULT_REQUESTS_PER_HOUR = 2000
+DEFAULT_AI_REQUESTS_PER_HOUR = 30
+HOUR_SECONDS = 3600
+
 # Set to `fly` when the app runs behind Fly.io's proxy (fly.toml does). The proxy is then the only way in, so
 # its headers say who the visitor is and which scheme they used. Without it, those headers are ignored,
 # because anyone can send them.
@@ -242,3 +253,76 @@ deck_misses = AttemptLimiter(MAX_DECK_MISSES, FAILURE_WINDOW_SECONDS, overall=No
 # Requests for the browse page's list, which anyone can make. Real browsing is a few a minute.
 MAX_BROWSE_PER_MINUTE = 120
 browse_limiter = AttemptLimiter(MAX_BROWSE_PER_MINUTE, 60, overall=None)
+
+
+def _env_limit(name: str, default: int) -> int:
+    """A limit from the environment: a whole number, or the default when it is unset, blank or not a number."""
+    try:
+        return int(os.environ.get(name, "").strip() or default)
+    except ValueError:
+        return default
+
+
+class RequestLimiter:
+    """Counts requests per key in a sliding window and turns a key away once it has used up its limit.
+
+    A window is held as two counts, this stretch and the one before it, and the count in force is the
+    earlier one scaled by how much of it still overlaps the window, plus the current one. That is within
+    a few percent of an exact sliding window and takes a few numbers per key however many requests were
+    made, where a list of timestamps would take one entry per request. Requests that are turned away aren't
+    counted, so waiting out the answer's `Retry-After` always works.
+
+    Only `max_tracked` keys are held. Past that, the least recently seen go first, so made-up keys can't
+    grow this without limit, and they can wipe the count of a real one. `limit` of 0 or less never refuses."""
+
+    def __init__(self, limit: int, window_seconds: float, max_tracked: int = 20_000) -> None:
+        self.limit = limit
+        self.window = window_seconds
+        self.max_tracked = max_tracked
+        # key -> [index of the stretch of time it was last seen in, requests in it, requests in the one before]
+        self._keys: dict[str, list[int]] = {}
+        self._lock = threading.Lock()
+
+    def begin(self, key: str, now: float | None = None) -> int:
+        """Counts a request and returns 0, or, if the key is over its limit, counts nothing and returns
+        how many seconds it must wait."""
+        if self.limit <= 0:
+            return 0
+        now = time.monotonic() if now is None else now
+        stretch, into = divmod(now, self.window)
+        stretch = int(stretch)
+        with self._lock:
+            seen = self._keys.pop(key, None)
+            if seen is None:
+                seen = [stretch, 0, 0]
+            elif stretch > seen[0]:
+                # Moved into the next stretch, which makes the last one "the one before"; further on, nothing is left of it.
+                seen[1], seen[2] = (0, seen[1]) if stretch == seen[0] + 1 else (0, 0)
+                seen[0] = stretch
+            self._keys[key] = seen  # Put back last, so the first key in the dict is the least recently seen.
+            while len(self._keys) > self.max_tracked:
+                del self._keys[next(iter(self._keys))]
+
+            current, before = seen[1], seen[2]
+            if before * (1 - into / self.window) + current < self.limit:
+                seen[1] += 1
+                return 0
+            return self._wait(current, before, into)
+
+    def _wait(self, current: int, before: int, into: float) -> int:
+        """Seconds until the count in force drops below the limit, if the key makes no more requests."""
+        if current < self.limit and before > 0:
+            # Still in this stretch: the earlier count is shrinking, and the limit is reached when it has shrunk enough.
+            needed = 1 - (self.limit - current) / before
+            return max(1, int((needed * self.window - into) + 1))
+        # This stretch's own count is the whole limit, so only the next stretch lets it go, as it becomes "the one before".
+        return max(1, int(self.window - into) + 1)
+
+
+request_limiter = RequestLimiter(_env_limit(REQUESTS_PER_HOUR_ENV, DEFAULT_REQUESTS_PER_HOUR), HOUR_SECONDS)
+ai_limiter = RequestLimiter(_env_limit(AI_REQUESTS_PER_HOUR_ENV, DEFAULT_AI_REQUESTS_PER_HOUR), HOUR_SECONDS)
+
+
+def scope_client_key(scope: Scope) -> str:
+    """`client_key` for a request that is still a bare ASGI scope, as it is in middleware."""
+    return client_key(Request(scope))

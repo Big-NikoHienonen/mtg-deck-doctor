@@ -21,6 +21,14 @@ export function useSecondsUntil(until: number | null): number {
   return seconds;
 }
 
+// "45s", then "about 12 minutes" once a wait is longer than a minute and a half, since an hourly limit
+// can mean a wait of most of an hour.
+function waitText(seconds: number): string {
+  if (seconds < 90) return `${seconds}s`;
+  const minutes = Math.round(seconds / 60);
+  return minutes < 90 ? `about ${minutes} minutes` : `about ${Math.round(seconds / 3600)} hours`;
+}
+
 // Says why the Doctor can't be asked right now and what to do about it, in the
 // place the player is looking. While a wait is running it counts down; when only
 // a person can fix the cause (no credits, a rejected key) there is one button
@@ -38,7 +46,7 @@ export default function AiNotice({ message, secondsLeft, canCheck }: { message: 
   return (
     <div role="alert" style={{ borderLeft: "4px solid var(--accent-gold)", background: "var(--surface)", padding: "10px 14px", fontSize: 14, lineHeight: 1.5 }}>
       <div>{message}</div>
-      {secondsLeft > 0 && <div style={{ color: "var(--text-muted)", marginTop: 4 }}>You can try again in {secondsLeft}s.</div>}
+      {secondsLeft > 0 && <div style={{ color: "var(--text-muted)", marginTop: 4 }}>You can try again in {waitText(secondsLeft)}.</div>}
       {canCheck && (
         <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <button type="button" className="btn" style={buttonStyle} onClick={check} disabled={checking}>

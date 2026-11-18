@@ -125,6 +125,13 @@ def ai_budget_handler(request: Request, exc: AiBudgetExceeded) -> JSONResponse:
     return JSONResponse(status_code=status, content=body)
 
 
+@app.exception_handler(ai_errors.AiAccountLimit)
+def ai_account_limit_handler(request: Request, exc: ai_errors.AiAccountLimit) -> JSONResponse:
+    logger.warning("hourly AI limit reached on %s %s: %d an hour, wait %ds", request.method, request.url.path, exc.limit, exc.wait)
+    status, body = ai_errors.describe_account_limit(exc.limit, exc.wait)
+    return JSONResponse(status_code=status, content=body, headers={"Retry-After": str(exc.wait)})
+
+
 @app.exception_handler(anthropic.APIError)
 def ai_failure_handler(request: Request, exc: anthropic.APIError) -> JSONResponse:
     status, body = ai_errors.describe(exc)
@@ -262,10 +269,21 @@ def _raise_if_error(result: dict) -> None:
         raise HTTPException(status_code=400, detail=result["error"])
 
 
+def _start_ai_request() -> None:
+    """Counts a model call against the signed-in account's hour, or raises AiAccountLimit when it has used
+    its share. Called where a call to the model is about to start, so a stored result being read back costs
+    nothing. With no sign-in (a local run), every call counts against one shared key."""
+    user = auth.current_user.get()
+    wait = auth.ai_limiter.begin(user.id if user else "open")
+    if wait:
+        raise ai_errors.AiAccountLimit(auth.ai_limiter.limit, wait)
+
+
 def _generate(generate) -> list[dict]:
     """Runs an AI generation, turning "the model never finished" into a 502
     the frontend can show — rather than storing an empty result that would
     read as "the Doctor has nothing to suggest"."""
+    _start_ai_request()
     try:
         return generate()
     except StructuredLoopError:
@@ -618,6 +636,7 @@ def set_visibility_endpoint(deck_id: str, request: VisibilityRequest) -> Deck:
 @app.post("/decks/{deck_id}/chat")
 def chat_endpoint(deck_id: str, request: ChatRequest) -> ChatResponse:
     deck = _get_deck_or_404(deck_id)
+    _start_ai_request()
     try:
         reply, messages = run_conversation(deck, deck.messages, request.message)
     except ConversationCutOff:

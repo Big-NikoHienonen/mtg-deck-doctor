@@ -12,15 +12,26 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
+from starlette.types import Scope
 
 from mtg_deck_doctor import auth
 from mtg_deck_doctor.api import app as api_app
-from mtg_deck_doctor.hardening import SecurityHeadersMiddleware
+from mtg_deck_doctor.hardening import RateLimitMiddleware, SecurityHeadersMiddleware
 
 DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
 app = FastAPI(title="MTG Deck Doctor", docs_url=None, redoc_url=None, openapi_url=None)
 app.mount("/api", api_app)
+
+
+def _count_request(scope: Scope) -> int:
+    """Counts a request against its address in the hourly limit, and returns 0 or the seconds to wait. Looks
+    `auth.request_limiter` up on every call, so a limiter swapped in (by a test, say) is the one used."""
+    return auth.request_limiter.begin(auth.scope_client_key(scope))
+
+
+# The last middleware added is the outermost, so the security headers go on a 429 too.
+app.add_middleware(RateLimitMiddleware, begin=_count_request)
 app.add_middleware(SecurityHeadersMiddleware, is_https=auth.is_https)
 
 # The page shell must never be served from a cache, or a new build isn't picked up. The files in

@@ -1,7 +1,7 @@
-"""Two guards that sit around every request: a limit on how large a request body may be, and the
-security headers on every response.
+"""Three guards that sit around every request: a limit on how many requests one address may make, a
+limit on how large a request body may be, and the security headers on every response.
 
-Both are plain ASGI middleware, so they see a request before FastAPI reads it and a response after
+All three are plain ASGI middleware, so they see a request before FastAPI reads it and a response after
 FastAPI has written it.
 """
 
@@ -10,6 +10,44 @@ from collections.abc import Callable
 from starlette.exceptions import HTTPException
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
+# ---- request volume ----------------------------------------------------------------------------------
+
+
+def wait_phrase(seconds: int) -> str:
+    """How long to wait, in words a person can use: "30 seconds", "about 12 minutes", "about 1 hour"."""
+    if seconds < 90:
+        return f"{seconds} second{'' if seconds == 1 else 's'}"
+    minutes = round(seconds / 60)
+    if minutes < 90:
+        return f"about {minutes} minutes"
+    hours = round(seconds / 3600)
+    return f"about {hours} hour{'' if hours == 1 else 's'}"
+
+
+class RateLimitMiddleware:
+    """Counts every request against the address that made it, and answers 429 with a Retry-After once
+    that address is over its limit. `begin` takes the request's scope, counts the request, and returns 0 or
+    how many seconds the address must wait. Files count too: a script that fetches the page over and over
+    costs bandwidth, which is the one cost Fly.io doesn't bound."""
+
+    def __init__(self, app: ASGIApp, begin: Callable[[Scope], int]) -> None:
+        self.app = app
+        self.begin = begin
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        wait = self.begin(scope)
+        if wait:
+            refusal = JSONResponse(
+                status_code=429,
+                content={"detail": f"Too many requests from your address. Try again in {wait_phrase(wait)}."},
+                headers={"Retry-After": str(wait)},
+            )
+            return await refusal(scope, receive, send)
+        await self.app(scope, receive, send)
+
 
 # ---- request size ------------------------------------------------------------------------------------
 

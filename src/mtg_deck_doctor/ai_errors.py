@@ -62,3 +62,20 @@ def describe_budget(spent: float, limit: float, resets_in: int) -> tuple[int, di
         "backend's environment and restart it."
     )
     return 429, {"detail": detail, "code": "ai_budget", "retry_after": None}
+
+
+class AiAccountLimit(Exception):
+    """An account has used its hour's model calls. `wait` is the seconds until it may start another."""
+
+    def __init__(self, limit: int, wait: int) -> None:
+        super().__init__(f"{limit} model calls an hour, used up; try again in {wait} seconds")
+        self.limit = limit
+        self.wait = wait
+
+
+def describe_account_limit(limit: int, wait: int) -> tuple[int, dict]:
+    """(HTTP status, JSON body) for a call refused because this account has used its hour's model calls.
+    Waiting is the fix, so `retry_after` carries the seconds. The page shows them as a countdown and holds
+    its own model calls until then, so the sentence doesn't repeat the time."""
+    detail = f"You've used this hour's {limit} requests to the Doctor."
+    return 429, {"detail": detail, "code": "ai_account_limit", "retry_after": wait}

@@ -47,6 +47,8 @@ cp .env.example .env
 | `ANTHROPIC_API_KEY` | Your Anthropic API key. Required for everything the Doctor does. |
 | `MTG_DECK_DOCTOR_AUTH` | Optional. `off` runs the app with no sign-in while there is no account, which `./dev-backend.sh` does. An account turns the sign-in on whatever this says. See [Sign in and public decks](#sign-in-and-public-decks). |
 | `MTG_DECK_DOCTOR_PROXY` | Optional. `fly` when the app runs behind Fly.io's proxy, which `fly.toml` sets. The app then reads the visitor's address and scheme from the proxy's headers. Without it those headers are ignored, because anyone can send them. |
+| `MTG_DECK_DOCTOR_REQUESTS_PER_HOUR` | Optional. The most requests one address may make in an hour, files included. Defaults to `2000`; `0` turns the limit off. See [Sign in and public decks](#sign-in-and-public-decks). |
+| `MTG_DECK_DOCTOR_AI_REQUESTS_PER_HOUR` | Optional. The most model calls one account may start in an hour. Defaults to `30`; `0` turns the limit off. See [AI usage and limits](#ai-usage-and-limits). |
 | `ANTHROPIC_MODEL` | Optional. The model to use. Defaults to `claude-sonnet-5`. |
 | `AI_DAILY_BUDGET_USD` | Optional, and off unless set. The most the Doctor may spend in a UTC day, as estimated from token counts. See [AI usage and limits](#ai-usage-and-limits). |
 | `ANTHROPIC_CHAT_EFFORT` | Optional. How hard the model thinks in chat: `low`, `medium`, `high` or `max`. Defaults to `medium`. |
@@ -168,6 +170,8 @@ The Doctor's model calls are the app's only real running cost, so they are meter
 - **Usage log.** Every call is recorded in `data/usage.jsonl` with its feature, model, token counts, and an estimated cost. The estimate comes from token counts and published rates, so it tracks the invoice but is not the invoice.
 - **Daily budget (optional).** Nothing is held back by default. Set `AI_DAILY_BUDGET_USD` and, once a day's estimated cost reaches it, the next call is refused with a 429 (`ai_budget`) until midnight UTC. It is meant for when other people use the app. For a hard stop on your account, set a spend limit in the Anthropic console.
 
+- **Hourly limit per account.** One account may start 30 model calls an hour: a chat message, or a refresh of suggestions, cut reviews, new cards or new commanders. Reading a stored result doesn't count, and neither does a request that is refused before it reaches the model. Past the limit, the next call is refused with a 429 (`ai_account_limit`) and a `Retry-After`, and the page counts down to when you can ask again. It keeps one account from spending the whole day's budget. `MTG_DECK_DOCTOR_AI_REQUESTS_PER_HOUR` changes it, and `0` turns it off. The count is in memory, so a restart clears it.
+
 What keeps each call small:
 
 - **Tool calls per message.** A chat message makes at most `CHAT_MAX_TOOL_ROUNDS` model calls. Real messages take 2 to 7, so the cap only catches a loop that never ends. The last call gets no tools and has to say what it did and what is left, so you can ask it to continue.
@@ -186,6 +190,7 @@ The backend is closed to everyone, except for public decks. Once an account exis
 - **Signing out ends every cookie the account has.** The cookie is a signed statement the server can't take back, so signing out raises the account's session version, which also ends a copy of the cookie and signs the account out of its other browsers. The cookie lasts 30 days otherwise.
 - **A private deck can't be found.** Its public address answers 404, the same as an address with no deck, so its existence isn't revealed. A new deck's id is also 16 random hex digits (64 bits), so a public address can't be guessed either. Ids made before that have 8 and still work. A client that asks for 20 public addresses with no deck behind them in 10 minutes gets a 429 on every public deck route until the window moves on.
 - **Requests and inputs have limits.** A request body over 64 KB on a route a stranger can reach, or 2 MB on any other, gets a 413 without being read in full. A card name is at most 200 characters, a deck name 100, a chat message 8,000, a count or quantity 99, and a list 1,000 entries (20,000 for a collection import). `api.py` names them at the top of the request models.
+- **Requests per hour are limited.** One address may make 2,000 requests an hour, files and API calls alike. A page load is about ten requests and a long session a few hundred, so the limit stops a script and not a person. Past it, the address gets a 429 with a `Retry-After` until its count falls. The window slides, so waiting out the `Retry-After` works and a burst at the top of an hour doesn't double the limit. The address is the one the sign-in limit uses, so the `Fly-Client-IP` check in [Deploy on Fly.io](#deploy-on-flyio) applies to this limit too. Everyone behind one shared address, such as an office, shares one count. The counts are in memory, so a restart clears them, and they assume one Machine. `MTG_DECK_DOCTOR_REQUESTS_PER_HOUR` changes the limit, and `0` turns it off. Fly's health check, every 30 seconds, uses 120 of the hour.
 - **Security headers.** Every response carries a Content-Security-Policy that allows scripts only from this server and the page's own hosts (Scryfall's API and images, Google Fonts), `X-Frame-Options: DENY`, `nosniff`, a referrer policy and a permissions policy, and HSTS over HTTPS. `hardening.py` holds the list. If the page needs a new outside host, add it to the policy there.
 - **No API docs.** `/docs`, `/redoc` and the OpenAPI schema are off.
 - **The server runs as `app`, not root.** The image's entrypoint hands `/app/data` to `app` and drops root before it starts. `mtg-deck-doctor` run as root acts as the owner of `data/` for the same reason.
@@ -252,8 +257,8 @@ cd frontend && npx tsc -b && npm run lint
 | `src/mtg_deck_doctor/api.py` | The FastAPI app and its routes. |
 | `Dockerfile`, `fly.toml` | The image, and its Fly.io config. |
 | `src/mtg_deck_doctor/server.py` | Serves the API under `/api` and the built front end, for running the app on one address. |
-| `src/mtg_deck_doctor/auth.py` | Signing in: the session cookie, who is signed in on a request, and the limits on guessing. |
-| `src/mtg_deck_doctor/hardening.py` | The request size limit and the security headers. |
+| `src/mtg_deck_doctor/auth.py` | Signing in: the session cookie, who is signed in on a request, and the limits on guessing and on request volume. |
+| `src/mtg_deck_doctor/hardening.py` | The request volume limit, the request size limit and the security headers. |
 | `src/mtg_deck_doctor/moderation.py` | The profanity check for usernames and deck names. |
 | `docker-entrypoint.sh` | Starts the container as root only to hand `data/` to `app`, then drops root. |
 | `src/mtg_deck_doctor/users.py`, `cli.py` | The accounts (files, password hashes), and the commands that make them. |
