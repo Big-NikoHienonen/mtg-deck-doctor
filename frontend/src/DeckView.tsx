@@ -1,6 +1,5 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import ReactMarkdown from "react-markdown";
 import {
   addCard,
   addManyToCollection,
@@ -28,7 +27,7 @@ import AiNotice, { useSecondsUntil } from "./AiNotice";
 import CardModal from "./CardModal";
 import CardPreview from "./CardPreview";
 import CardSearchBox from "./CardSearchBox";
-import ChatSuggestions from "./ChatSuggestions";
+import Correspondence from "./Correspondence";
 import { chatItems, type Suggestion } from "./chatMessages";
 import CutSuggestions from "./CutSuggestions";
 import { replacementPool } from "./cutRanking";
@@ -49,7 +48,7 @@ import ImportCardsModal from "./ImportCardsModal";
 import { adoptLegacyPrintings, priceUsdOf, type SelectedPrinting } from "./printings";
 import Recommendations from "./Recommendations";
 import TopIncludes from "./TopIncludes";
-import { buttonStyle, eyebrowStyle, inputStyle } from "./styles";
+import { buttonStyle, eyebrowStyle } from "./styles";
 import "./deckview.css";
 
 // Auto-retry schedule for Scryfall lookup failures (see the fetch effect
@@ -121,7 +120,6 @@ export default function DeckView() {
   const [showImport, setShowImport] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const [exportText, setExportText] = useState<string | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
 
   // The deck page is wider than the rest of the app.
   useEffect(() => {
@@ -414,14 +412,6 @@ export default function DeckView() {
     clearSelectionIfGone(name, result);
   }
 
-  // Scrolled explicitly at the two moments real chat activity happens
-  // (sending, and the reply landing) rather than reactively off message
-  // count — that value also changes when a deck's history first loads,
-  // which would jump the page to the bottom every time a deck is opened.
-  function scrollToBottomSoon() {
-    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
-  }
-
   // After a failure the next send waits: a few seconds, then longer if it keeps
   // failing — so a problem can't be hammered by pressing Send again.
   const CHAT_WAITS = [3, 10, 30];
@@ -435,17 +425,15 @@ export default function DeckView() {
     setSending(true);
     setError(null);
     setChatError(null);
-    scrollToBottomSoon();
     try {
       const result = await sendMessage(deck.id, message);
       setDeck(result.deck);
       setPendingMessage(null);
       chatFailures.current = 0;
-      scrollToBottomSoon();
-    } catch (err) {
-      // The message stays in the box, so nothing typed is lost.
+      } catch (err) {
+      // The message goes back in the box, ahead of anything typed while it was being sent, so nothing is lost.
       setPendingMessage(null);
-      setInput(message);
+      setInput((typed) => (typed.trim() ? `${message}\n${typed}` : message));
       chatFailures.current += 1;
       setChatError(err instanceof Error ? err.message : "That message didn't go through.");
       chatWaitRef.current = Date.now() + CHAT_WAITS[Math.min(chatFailures.current, CHAT_WAITS.length) - 1] * 1000;
@@ -791,64 +779,22 @@ export default function DeckView() {
       {exportText !== null && <ExportDecklistModal text={exportText} onClose={() => setExportText(null)} />}
 
       {deck && tab === "chat" && (
-        <div className="dv-narrow">
-          <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {visibleMessages.map((m, i) => (
-              <Fragment key={i}>
-                {m.text.trim() && (
-                  <div
-                    style={{
-                      alignSelf: m.role === "user" ? "flex-end" : "flex-start",
-                      maxWidth: "85%",
-                      background: m.role === "user" ? "var(--user-bubble)" : "var(--surface)",
-                      border: m.role === "user" ? "none" : "1px solid var(--border)",
-                      fontStyle: m.role === "user" ? "italic" : "normal",
-                      padding: "10px 14px",
-                      borderRadius: 4,
-                      fontSize: 15,
-                      lineHeight: 1.5,
-                      whiteSpace: m.role === "user" ? "pre-wrap" : "normal",
-                    }}
-                  >
-                    {m.role === "user" ? m.text : <ReactMarkdown>{m.text}</ReactMarkdown>}
-                  </div>
-                )}
-                {deck && m.suggestions.length > 0 && <ChatSuggestions suggestions={m.suggestions} deck={deck} onApply={handleApplySuggestion} />}
-              </Fragment>
-            ))}
-            {sending && <div style={{ color: "var(--text-muted)", fontSize: 14 }}>The Doctor is thinking…</div>}
-            <div ref={bottomRef} />
-          </section>
-
-          {/* Beside the box the player is typing in, not at the top of the page. */}
-          {chatLocked && (aiProblem || chatError) && (
-            <AiNotice
-              message={aiProblem ? aiProblem.message : chatError!}
-              secondsLeft={aiProblem ? aiWait : chatWait}
-              canCheck={aiNeedsFixing}
-            />
-          )}
-
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSend();
-            }}
-            style={{ display: "flex", gap: 8 }}
-          >
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask the Doctor..."
-              maxLength={8000} // The backend refuses a longer message (CHAT_MESSAGE_MAX in api.py).
-              style={inputStyle}
-              disabled={!deck || sending}
-            />
-            <button type="submit" className="btn" style={buttonStyle} disabled={!deck || sending || chatLocked}>
-              Send
-            </button>
-          </form>
-        </div>
+        <Correspondence
+          deck={deck}
+          items={visibleMessages}
+          sending={sending}
+          input={input}
+          onInput={setInput}
+          onSend={handleSend}
+          locked={chatLocked}
+          notice={
+            // Beside the box the player is typing in, not at the top of the page.
+            chatLocked && (aiProblem || chatError) ? (
+              <AiNotice message={aiProblem ? aiProblem.message : chatError!} secondsLeft={aiProblem ? aiWait : chatWait} canCheck={aiNeedsFixing} />
+            ) : null
+          }
+          onApply={handleApplySuggestion}
+        />
       )}
       </div>
 

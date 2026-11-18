@@ -65,7 +65,7 @@ export default function ChatSuggestions({
 
   const pending = suggestions.filter((s) => !isDone(s));
   return (
-    <div style={{ alignSelf: "flex-start", width: "85%", display: "flex", flexDirection: "column", gap: 6 }}>
+    <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 6 }}>
       {suggestions.map((s) => {
         const done = isDone(s);
         const error = errors[keyOf(s)];
