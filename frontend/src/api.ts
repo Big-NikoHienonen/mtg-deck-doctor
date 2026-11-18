@@ -5,6 +5,12 @@ import type { SelectedPrinting } from "./printings";
 // (server.py), and in development Vite sends /api to the backend on port 8000 (vite.config.ts).
 const API_BASE = "/api";
 
+// A path with a card name in its query string. The path is relative (API_BASE has no host), so it can't go
+// through `new URL`, which needs a base.
+function withName(path: string, name: string): string {
+  return `${path}?${new URLSearchParams({ name })}`;
+}
+
 // fetch() itself rejects on a network-level failure (offline, DNS, a CORS
 // block with no response at all) — distinct from a normal non-2xx
 // response, which resolves fine and is handled by each call site's own
@@ -300,9 +306,7 @@ export function addCard(deckId: string, name: string): Promise<Deck> {
 }
 
 export async function removeCard(deckId: string, name: string): Promise<Deck> {
-  const url = new URL(`${API_BASE}/decks/${deckId}/cards`);
-  url.searchParams.set("name", name);
-  const res = await safeFetch(url, { method: "DELETE" });
+  const res = await safeFetch(withName(`${API_BASE}/decks/${deckId}/cards`, name), { method: "DELETE" });
   if (!res || !res.ok) {
     const body = await res?.json().catch(() => null);
     throw new Error(detailOf(body, "That didn't work."));
@@ -331,9 +335,7 @@ export function keepCard(deckId: string, name: string): Promise<Deck> {
 }
 
 export async function unkeepCard(deckId: string, name: string): Promise<Deck> {
-  const url = new URL(`${API_BASE}/decks/${deckId}/keep`);
-  url.searchParams.set("name", name);
-  const res = await safeFetch(url, { method: "DELETE" });
+  const res = await safeFetch(withName(`${API_BASE}/decks/${deckId}/keep`, name), { method: "DELETE" });
   if (!res || !res.ok) {
     const body = await res?.json().catch(() => null);
     throw new Error(detailOf(body, "That didn't work."));
@@ -655,9 +657,7 @@ export async function addManyToCollection(names: string[]): Promise<string[]> {
 }
 
 export async function removeFromCollection(name: string): Promise<string[]> {
-  const url = new URL(`${API_BASE}/collection`);
-  url.searchParams.set("name", name);
-  const res = await safeFetch(url, { method: "DELETE" });
+  const res = await safeFetch(withName(`${API_BASE}/collection`, name), { method: "DELETE" });
   if (!res || !res.ok) throw new Error("Couldn't update your collection.");
   const data = await res.json();
   return data.cards;
