@@ -7,6 +7,9 @@ import { foilSupport, priceUsdOf, selectPrinting, type SelectedPrinting } from "
 import { buttonStyle, eyebrowStyle, inputStyle } from "./styles";
 import { reportFailure } from "./snackbarStore";
 
+// The most copies the "Add more" box adds at once.
+const MAX_ADD_MANY = 40;
+
 const LEGALITY_LABEL: Record<string, string> = {
   legal: "Legal in Commander",
   banned: "Banned in Commander",
@@ -81,7 +84,10 @@ export default function CardModal({
   onToggleOwned?: () => Promise<void>;
 }) {
   const [showPrintingPicker, setShowPrintingPicker] = useState(false);
-  const [quantity, setQuantity] = useState(1);
+  // What is typed in the "Add more" box, which can be empty while a number is being replaced. An empty box adds
+  // one, as its placeholder says.
+  const [quantityText, setQuantityText] = useState("");
+  const quantity = Math.min(MAX_ADD_MANY, Math.max(1, parseInt(quantityText, 10) || 1));
   const [addingOne, setAddingOne] = useState(false);
   const [addingMany, setAddingMany] = useState(false);
   const [addMessage, setAddMessage] = useState<string | null>(null);
@@ -373,10 +379,15 @@ export default function CardModal({
                   <div style={{ display: "flex", gap: 8 }}>
                     <input
                       type="number"
+                      inputMode="numeric"
                       min={1}
-                      max={40}
-                      value={quantity}
-                      onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      max={MAX_ADD_MANY}
+                      value={quantityText}
+                      placeholder="1"
+                      aria-label="How many copies to add"
+                      onChange={(e) => setQuantityText(e.target.value)}
+                      // A number outside the limits is brought inside them when the box is left, not while it is typed.
+                      onBlur={() => quantityText && setQuantityText(String(quantity))}
                       style={{ ...inputStyle, width: 64, textAlign: "center" }}
                     />
                     <button onClick={handleAddMany} disabled={addingMany} className="btn" style={buttonStyle}>
