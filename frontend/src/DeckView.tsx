@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   addCard,
@@ -57,7 +57,7 @@ import "./deckview.css";
 // in DeckView) — slow and capped on purpose, not a tight poll loop.
 const RETRY_DELAYS_MS = [30_000, 90_000, 180_000];
 
-const TAB_LABELS = { build: "Deck", insights: "Insights", chat: "Correspondence" } as const;
+const TAB_LABELS = { build: "Deck", insights: "Insights" } as const;
 
 // An EDHREC include at or above this rate counts as a "staple" for the
 // Insights tab's attention badge — played in at least half the decks that
@@ -95,7 +95,24 @@ export default function DeckView() {
   const aiNeedsFixing = aiProblem !== null && aiProblem.until === null;
   const chatLocked = aiNeedsFixing || aiWait > 0 || chatWait > 0;
   const [cardInfo, setCardInfo] = useState<Record<string, CardInfo>>({});
-  const [tab, setTab] = useState<"build" | "insights" | "chat">("build");
+  const [tab, setTab] = useState<"build" | "insights">("build");
+  // Correspondence is a panel over the deck, not a tab, so it can be opened from either tab and closed at once.
+  const [chatOpen, setChatOpen] = useState(false);
+  // Whether the Doctor has answered while the panel was closed, for the dot on its button.
+  const [unseenReply, setUnseenReply] = useState(false);
+  const chatOpenRef = useRef(false);
+  const chatOpenerRef = useRef<HTMLElement | null>(null);
+  const openChat = (e: ReactMouseEvent<HTMLElement>) => {
+    chatOpenerRef.current = e.currentTarget; // Not document.activeElement: Safari doesn't focus a button when it is clicked.
+    chatOpenRef.current = true;
+    setChatOpen(true);
+    setUnseenReply(false);
+  };
+  const closeChat = useCallback(() => {
+    chatOpenRef.current = false;
+    setChatOpen(false);
+    chatOpenerRef.current?.focus({ preventScroll: true }); // Back to the button that opened it, without moving the page.
+  }, []);
   const [commanderIncludes, setCommanderIncludes] = useState<CommanderIncludes | null>(null);
   const [replacementsReady, setReplacementsReady] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -430,6 +447,7 @@ export default function DeckView() {
     try {
       const result = await sendMessage(deck.id, message);
       setDeck(result.deck);
+      if (!chatOpenRef.current) setUnseenReply(true);
       setPendingMessage(null);
       chatFailures.current = 0;
       } catch (err) {
@@ -599,12 +617,17 @@ export default function DeckView() {
 
         {deck && (
           <div className="dv-actions" role="tablist">
-            {(["build", "insights", "chat"] as const).map((t) => (
+            {(["build", "insights"] as const).map((t) => (
               <button key={t} role="tab" aria-selected={tab === t} className="dv-action" onClick={() => setTab(t)}>
                 {TAB_LABELS[t]}
                 {t === "insights" && stapleCount > 0 && <span className="dv-count">{stapleCount}</span>}
               </button>
             ))}
+            <button className="dv-action" aria-haspopup="dialog" aria-expanded={chatOpen} onClick={openChat}>
+              Correspondence
+              {!chatOpen && sending && <span className="dv-chat-dot is-working" role="img" aria-label="The Doctor is writing an answer" />}
+              {!chatOpen && !sending && unseenReply && <span className="dv-chat-dot" role="img" aria-label="The Doctor has answered" />}
+            </button>
             <span className="dv-sep" aria-hidden />
             <button className="dv-action" onClick={() => setShowImport(true)}>
               Import
@@ -780,7 +803,7 @@ export default function DeckView() {
 
       {exportText !== null && <ExportDecklistModal text={exportText} onClose={() => setExportText(null)} />}
 
-      {deck && tab === "chat" && (
+      {deck && chatOpen && (
         <Correspondence
           deck={deck}
           items={visibleMessages}
@@ -796,6 +819,7 @@ export default function DeckView() {
             ) : null
           }
           onApply={handleApplySuggestion}
+          onClose={closeChat}
         />
       )}
       </div>
