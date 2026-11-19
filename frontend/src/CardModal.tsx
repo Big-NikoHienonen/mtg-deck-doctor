@@ -5,6 +5,7 @@ import CardImage from "./CardImage";
 import FoilSheen from "./FoilSheen";
 import { foilSupport, priceUsdOf, selectPrinting, type SelectedPrinting } from "./printings";
 import { buttonStyle, eyebrowStyle, inputStyle } from "./styles";
+import { reportFailure } from "./snackbarStore";
 
 const LEGALITY_LABEL: Record<string, string> = {
   legal: "Legal in Commander",
@@ -51,8 +52,8 @@ export default function CardModal({
   onChangePrinting?: (printing: SelectedPrinting) => void;
   onAddOne?: () => void;
   onAddMany?: (quantity: number) => Promise<{ added: number; failed: number; error: string | null }>;
-  onRemoveOne?: () => void;
-  onRemoveAll?: () => void;
+  onRemoveOne?: () => void | Promise<void>;
+  onRemoveAll?: () => void | Promise<void>;
   onClose: () => void;
   // Moves to the adjacent card in whatever list this modal was opened
   // from (the ledger's categorized order, or the search grid's current
@@ -123,8 +124,19 @@ export default function CardModal({
     setTogglingOwned(true);
     try {
       await onToggleOwned();
+    } catch (err) {
+      reportFailure(err, `Couldn't update your collection for ${name}`);
     } finally {
       setTogglingOwned(false);
+    }
+  }
+
+  // Removing has no message of its own in the window, so a refusal goes to the snackbar.
+  async function handleRemove(action: () => void | Promise<void>, what: string) {
+    try {
+      await action();
+    } catch (err) {
+      reportFailure(err, what);
     }
   }
 
@@ -373,12 +385,12 @@ export default function CardModal({
                   </div>
                 )}
                 {onRemoveOne && !!count && count > 0 && (
-                  <button onClick={onRemoveOne} className="btn btn-danger" style={buttonStyle}>
+                  <button onClick={() => handleRemove(onRemoveOne, `Couldn't remove ${name}`)} className="btn btn-danger" style={buttonStyle}>
                     Remove one{count > 1 ? ` (${count} in deck)` : ""}
                   </button>
                 )}
                 {onRemoveAll && !!count && count > 1 && (
-                  <button onClick={onRemoveAll} className="btn btn-danger" style={buttonStyle}>
+                  <button onClick={() => handleRemove(onRemoveAll, `Couldn't remove all of ${name}`)} className="btn btn-danger" style={buttonStyle}>
                     Remove all {count}
                   </button>
                 )}

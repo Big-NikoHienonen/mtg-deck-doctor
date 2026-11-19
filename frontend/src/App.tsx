@@ -9,6 +9,7 @@ import DeckRoute from "./DeckRoute";
 import DecksPage from "./DecksPage";
 import LandingView from "./LandingView";
 import LoginPage from "./LoginPage";
+import Snackbar from "./Snackbar";
 import ProfilePage from "./ProfilePage";
 import CardSearchPage from "./CardSearchPage";
 import CardSearchResultsPage from "./CardSearchResultsPage";
@@ -37,6 +38,7 @@ export default function App() {
           </Route>
         </Routes>
       </main>
+      <Snackbar />
     </>
   );
 }

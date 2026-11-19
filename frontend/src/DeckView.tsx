@@ -21,6 +21,7 @@ import {
   type CardInfo,
   type CommanderIncludes,
   type Deck,
+  UNREACHABLE,
 } from "./api";
 import { useAiProblem } from "./aiStatus";
 import AiNotice, { useSecondsUntil } from "./AiNotice";
@@ -28,6 +29,7 @@ import CardModal from "./CardModal";
 import CardPreview from "./CardPreview";
 import CardSearchBox from "./CardSearchBox";
 import Correspondence from "./Correspondence";
+import { orSnackbar } from "./snackbarStore";
 import { chatItems, type Suggestion } from "./chatMessages";
 import CutSuggestions from "./CutSuggestions";
 import { replacementPool } from "./cutRanking";
@@ -142,7 +144,7 @@ export default function DeckView() {
           adoptLegacyPrintings(found).then((adopted) => adopted !== found && setDeck(adopted));
         } else setNotFound(true);
       })
-      .catch(() => setError("Couldn't reach the Deck Doctor backend. Is it running on port 8000?"));
+      .catch(() => setError(UNREACHABLE));
   }, [deckId]);
 
   // Ownership isn't deck-scoped, so it's fetched once per page visit, not
@@ -407,8 +409,8 @@ export default function DeckView() {
     let result = deck;
     for (let i = 0; i < count; i++) {
       result = await removeCard(deck.id, name);
+      setDeck(result); // Shown copy by copy, so a failure part-way leaves the page showing what was removed.
     }
-    setDeck(result);
     clearSelectionIfGone(name, result);
   }
 
@@ -652,7 +654,7 @@ export default function DeckView() {
               priceUsd={previewName ? priceFor(previewName) : undefined}
               inDeck={!!previewName && (cardCounts.has(previewName) || previewName === deck.commander)}
               owned={!!previewName && ownedCards.has(previewName)}
-              onToggleOwned={() => previewName && handleToggleOwned(previewName)}
+              onToggleOwned={orSnackbar(async () => previewName && (await handleToggleOwned(previewName)), () => `Couldn't update your collection for ${previewName}`)}
               onOpen={() => previewName && setModalCard(previewName)}
             />
             <div className="dv-content">
@@ -675,8 +677,8 @@ export default function DeckView() {
                 owned={ownedCards}
                 onHover={(name) => setHoveredCard(name)}
                 onOpen={(name) => setModalCard(name)}
-                onAddOne={async (name) => setDeck(await addCard(deck.id, name))}
-                onRemoveOne={handleRemoveOne}
+                onAddOne={orSnackbar(async (name) => setDeck(await addCard(deck.id, name)), (name) => `Couldn't add ${name}`)}
+                onRemoveOne={orSnackbar(handleRemoveOne, (name) => `Couldn't remove ${name}`)}
               />
               <DeckStats stats={stats} />
             </div>

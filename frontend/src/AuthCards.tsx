@@ -19,7 +19,7 @@ export function Card({ title, children }: { title: string; children: ReactNode }
 export function BackendDown() {
   return (
     <Card title="Can't reach the backend">
-      <Note>Is it running on port 8000?</Note>
+      <Note>Check your connection, then try again.</Note>
       <button type="button" className="btn" style={buttonStyle} onClick={() => refreshAuth()}>
         Try again
       </button>

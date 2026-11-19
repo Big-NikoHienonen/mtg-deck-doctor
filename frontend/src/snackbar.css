@@ -1,0 +1,74 @@
+/* The snackbar (Snackbar.tsx): a message at the top of the page, under the app bar, above every card window.
+   The top, not the bottom, because the bottom already holds the deck's count bar and the chat box. */
+
+.snackbar-host {
+  position: fixed;
+  top: calc(var(--app-bar-height, 52px) + 12px);
+  left: 0;
+  right: 0;
+  z-index: 200;
+  display: flex;
+  justify-content: center;
+  padding: 0 16px;
+  /* The empty host never gets in the way of a click. */
+  pointer-events: none;
+}
+
+.snackbar {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: 560px;
+  padding: 11px 8px 11px 16px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--danger);
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  /* The app's interface font, as the app bar and the deck page use; the page itself is serif. */
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  animation: snackbar-in 160ms ease-out;
+}
+
+.snackbar-message {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.snackbar-close {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  margin-top: -2px;
+  font: inherit;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.snackbar-close:hover {
+  color: var(--text);
+  background: var(--user-bubble);
+}
+
+@keyframes snackbar-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .snackbar {
+    animation: none;
+  }
+}

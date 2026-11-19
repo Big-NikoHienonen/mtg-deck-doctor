@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { getHub, type Hub } from "./api";
+import { getHub, UNREACHABLE, type Hub } from "./api";
 
 // What the landing page and the decks page both draw on: loaded when the page opens, and again when
 // something on it changes what the backend knows (load).
@@ -12,7 +12,7 @@ export function useHub() {
       setHub(await getHub());
       setError(null);
     } catch {
-      setError("Couldn't reach the Deck Doctor backend. Is it running on port 8000?");
+      setError(UNREACHABLE);
     }
   }, []);
 

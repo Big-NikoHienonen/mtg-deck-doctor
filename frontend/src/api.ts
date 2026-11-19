@@ -49,12 +49,25 @@ function detailOf(body: { detail?: unknown } | null, fallback: string): string {
   return typeof body?.detail === "string" ? body.detail : fallback;
 }
 
+// What to tell the person when a request got no answer at all: offline, or the server is down.
+export const UNREACHABLE = "The server didn't answer. Check your connection and try again.";
+
+// The error for a request that failed, in words the person can use: the backend's own explanation when it
+// gave one (a refused card, "Too many requests"), a plain line for a server fault, and `fallback` otherwise.
+async function failure(res: Response | null, fallback: string): Promise<Error> {
+  if (!res) return new Error(UNREACHABLE);
+  const body = await res.json().catch(() => null);
+  if (typeof body?.detail === "string") return new Error(body.detail);
+  if (res.status >= 500) return new Error("The server had a problem. Try again in a moment.");
+  return new Error(fallback);
+}
+
 // Asks the backend whether the model can be reached right now, without sending
 // anyone's message. Clears the page-wide problem if it can. Returns null when
 // it can, otherwise why not.
 export async function checkAi(): Promise<string | null> {
   const res = await safeFetch(`${API_BASE}/ai/status`);
-  if (!res) return "Couldn't reach the Deck Doctor backend. Is it running on port 8000?";
+  if (!res) return UNREACHABLE;
   if (res.ok) {
     clearAiProblem();
     return null;
@@ -106,7 +119,7 @@ export async function createDeck(options?: { name?: string; commander?: string; 
     `${API_BASE}/decks`,
     options ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(options) } : { method: "POST" },
   );
-  if (!res) throw new Error("Couldn't reach the Deck Doctor backend. Is it running on port 8000?");
+  if (!res) throw new Error(UNREACHABLE);
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     throw new Error(typeof body?.detail === "string" ? body.detail : "Couldn't create the deck.");
@@ -122,7 +135,7 @@ export async function setDeckVisibility(id: string, isPublic: boolean): Promise<
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ public: isPublic }),
   });
-  if (!res) throw new Error("Couldn't reach the Deck Doctor backend. Is it running on port 8000?");
+  if (!res) throw new Error(UNREACHABLE);
   if (!res.ok) throw new Error(detailOf(await res.json().catch(() => null), "Couldn't change who can see this deck."));
   return res.json();
 }
@@ -150,7 +163,7 @@ export async function listPublicDecks(options: { q?: string; sort?: "updated" | 
   if (options.limit) params.set("limit", String(options.limit));
   if (options.offset) params.set("offset", String(options.offset));
   const res = await safeFetch(`${API_BASE}/public/decks?${params}`);
-  if (!res) throw new Error("Couldn't reach the Deck Doctor backend. Is it running on port 8000?");
+  if (!res) throw new Error(UNREACHABLE);
   if (res.status === 429) throw new Error("Slow down a little: too many requests. Try again in a moment.");
   if (!res.ok) throw new Error("Couldn't load the decks. Try again.");
   return res.json();
@@ -164,7 +177,7 @@ export async function saveUsername(username: string): Promise<string> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username }),
   });
-  if (!res) throw new Error("Couldn't reach the Deck Doctor backend. Is it running on port 8000?");
+  if (!res) throw new Error(UNREACHABLE);
   const body = await res.json().catch(() => null);
   if (!res.ok) throw new Error(res.status === 422 ? "A username is 3 to 24 characters: letters, numbers, hyphens and underscores." : detailOf(body, "Couldn't save that username."));
   return body.username;
@@ -248,7 +261,7 @@ export async function logIn(email: string, password: string): Promise<LoginResul
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
   });
-  if (!res) return { error: "Couldn't reach the Deck Doctor backend. Is it running on port 8000?" };
+  if (!res) return { error: UNREACHABLE };
   const body = await res.json().catch(() => null);
   if (res.ok) return { email: typeof body?.email === "string" ? body.email : null, username: typeof body?.username === "string" ? body.username : null };
   if (res.status === 401) return { error: "Incorrect email or password." };
@@ -270,7 +283,7 @@ export async function sendMessage(id: string, message: string): Promise<{ reply:
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message }),
   });
-  if (!res) throw new Error("Couldn't reach the Deck Doctor backend. Is it running on port 8000?");
+  if (!res) throw new Error(UNREACHABLE);
   if (!res.ok) {
     // Model failures are already recorded page-wide by safeFetch; the message is
     // the backend's own explanation of what went wrong.
@@ -286,10 +299,7 @@ async function postCardName(url: string, name: string): Promise<Deck> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name }),
   });
-  if (!res || !res.ok) {
-    const body = await res?.json().catch(() => null);
-    throw new Error(detailOf(body, "That didn't work."));
-  }
+  if (!res || !res.ok) throw await failure(res, "That didn't work.");
   return res.json();
 }
 
@@ -307,10 +317,7 @@ export function addCard(deckId: string, name: string): Promise<Deck> {
 
 export async function removeCard(deckId: string, name: string): Promise<Deck> {
   const res = await safeFetch(withName(`${API_BASE}/decks/${deckId}/cards`, name), { method: "DELETE" });
-  if (!res || !res.ok) {
-    const body = await res?.json().catch(() => null);
-    throw new Error(detailOf(body, "That didn't work."));
-  }
+  if (!res || !res.ok) throw await failure(res, "That didn't work.");
   return res.json();
 }
 
@@ -336,10 +343,7 @@ export function keepCard(deckId: string, name: string): Promise<Deck> {
 
 export async function unkeepCard(deckId: string, name: string): Promise<Deck> {
   const res = await safeFetch(withName(`${API_BASE}/decks/${deckId}/keep`, name), { method: "DELETE" });
-  if (!res || !res.ok) {
-    const body = await res?.json().catch(() => null);
-    throw new Error(detailOf(body, "That didn't work."));
-  }
+  if (!res || !res.ok) throw await failure(res, "That didn't work.");
   return res.json();
 }
 
@@ -351,10 +355,7 @@ export async function bulkAddCards(deckId: string, name: string, count: number):
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, count }),
   });
-  if (!res || !res.ok) {
-    const body = await res?.json().catch(() => null);
-    throw new Error(detailOf(body, "That didn't work."));
-  }
+  if (!res || !res.ok) throw await failure(res, "That didn't work.");
   return res.json();
 }
 
@@ -377,10 +378,7 @@ export async function importCards(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ entries }),
   });
-  if (!res || !res.ok) {
-    const body = await res?.json().catch(() => null);
-    throw new Error(detailOf(body, "That didn't work."));
-  }
+  if (!res || !res.ok) throw await failure(res, "That didn't work.");
   return res.json();
 }
 
@@ -637,7 +635,7 @@ export async function addToCollection(name: string): Promise<string[]> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name }),
   });
-  if (!res || !res.ok) throw new Error("Couldn't update your collection.");
+  if (!res || !res.ok) throw await failure(res, "Couldn't update your collection.");
   const data = await res.json();
   return data.cards;
 }
@@ -651,14 +649,14 @@ export async function addManyToCollection(names: string[]): Promise<string[]> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ names }),
   });
-  if (!res || !res.ok) throw new Error("Couldn't update your collection.");
+  if (!res || !res.ok) throw await failure(res, "Couldn't update your collection.");
   const data = await res.json();
   return data.cards;
 }
 
 export async function removeFromCollection(name: string): Promise<string[]> {
   const res = await safeFetch(withName(`${API_BASE}/collection`, name), { method: "DELETE" });
-  if (!res || !res.ok) throw new Error("Couldn't update your collection.");
+  if (!res || !res.ok) throw await failure(res, "Couldn't update your collection.");
   const data = await res.json();
   return data.cards;
 }
@@ -967,7 +965,7 @@ export type Usage = {
 
 export async function getUsage(days: number, recent: number): Promise<Usage> {
   const res = await safeFetch(`${API_BASE}/usage?days=${days}&recent=${recent}`);
-  if (!res) throw new Error("Couldn't reach the Deck Doctor backend. Is it running on port 8000?");
+  if (!res) throw new Error(UNREACHABLE);
   if (!res.ok) throw new Error("Couldn't load the usage.");
   return res.json();
 }

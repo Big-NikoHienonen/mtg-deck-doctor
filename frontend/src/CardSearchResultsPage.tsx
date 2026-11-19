@@ -238,11 +238,9 @@ export default function CardSearchResultsPage() {
   async function handleRemoveAll() {
     if (!modalDeck || !openCard) return;
     const currentCount = modalDeck.cards.filter((n) => n === openCard.name).length;
-    let updated = modalDeck;
     for (let i = 0; i < currentCount; i++) {
-      updated = await removeCard(modalDeck.id, openCard.name);
+      updateDeck(await removeCard(modalDeck.id, openCard.name)); // One copy at a time, so a failure part-way leaves the page showing what was removed.
     }
-    updateDeck(updated);
   }
 
   async function handleChangePrinting(printing: SelectedPrinting) {
