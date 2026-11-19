@@ -732,6 +732,9 @@ export type CardInfo = {
   // "{2}{U}{B}"; empty for a land. Absent on cards cached before it was recorded.
   manaCost?: string | null;
   cmc?: number | null;
+  // What the card can tap for, as WUBRGC letters; [] for a card that makes no mana. Absent on cards cached before it
+  // was recorded, which the backend fills in the next time the deck's cards are looked up.
+  producedMana?: string[];
 };
 
 // Used to bucket the ledger by card type (Creatures/Instants/Lands/...), to

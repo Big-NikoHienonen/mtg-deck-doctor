@@ -872,6 +872,20 @@
   font-weight: 700;
 }
 
+.dv-stats h3 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* A part of the section under its own small heading. */
+.dv-block {
+  margin-top: 32px;
+}
+
 .dv-stats-row {
   display: flex;
   gap: 36px;
@@ -965,7 +979,6 @@
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 12px;
-  margin-top: 28px;
   text-align: center;
 }
 
@@ -992,6 +1005,123 @@
 @media (max-width: 640px) {
   .dv-colors {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Symbols and sources: for each color, how big a part of the colored symbols it is and how big a part of the
+   mana sources, so a color that is asked for more than it is supplied stands out. */
+.dv-balance-note {
+  margin-bottom: 16px;
+  max-width: 640px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.dv-balance-note p {
+  margin: 0 0 4px;
+}
+
+.dv-balance-note strong {
+  color: var(--text);
+}
+
+.dv-bal {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 640px;
+}
+
+.dv-bal-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 76px;
+  gap: 12px;
+  align-items: center;
+}
+
+.dv-bal-row .ms {
+  font-size: 28px;
+}
+
+.dv-bal-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.dv-bal-bar {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 76px;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.dv-bal-track {
+  display: flex;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--dv-line) 55%, transparent);
+}
+
+.dv-bal-fill {
+  height: 100%;
+}
+
+.dv-bal-symbols {
+  background: var(--accent);
+}
+
+.dv-bal-lands {
+  background: var(--accent-gold);
+}
+
+.dv-bal-other {
+  background: color-mix(in srgb, var(--accent-gold) 45%, transparent);
+}
+
+.dv-bal-n {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.dv-bal-flag {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--danger);
+}
+
+.dv-balance .dv-legend {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.dv-balance-foot {
+  margin: 10px 0 0;
+  max-width: 640px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+@media (max-width: 640px) {
+  .dv-bal-row {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  /* The flag moves under the bars, where a phone has room for it. */
+  .dv-bal-flag {
+    grid-column: 2;
+    margin-top: -6px;
+  }
+
+  .dv-bal-bar {
+    grid-template-columns: 52px minmax(0, 1fr) 68px;
   }
 }
 

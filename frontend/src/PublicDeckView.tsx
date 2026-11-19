@@ -165,7 +165,7 @@ export default function PublicDeckView() {
               onHover={(name) => setHoveredCard(name)}
               onOpen={(name) => setModalCard(name)}
             />
-            <DeckStats stats={stats} />
+            <DeckStats stats={stats} rows={rows} identity={deck.commander_color_identity} />
           </div>
         </div>
       </div>

@@ -12,6 +12,7 @@ The backend is FastAPI (Python, managed with uv). The front end is React and Typ
 
 - Deckbuilder: the list, grouped and sorted as you choose, with a card preview. Select a card, or the commander, to see its details, rulings, and printings, and to use it as a foil.
 - Insights: EDHREC's top includes for your commander, a health check, cut suggestions, and swaps.
+- Manalytics, under the list: the mana curve, the average and median mana value, how the colored symbols in the costs split between the colors, and a chart that sets each color's symbols beside the cards that make it. A color is flagged when its share of the sources is at least ten points below its share of the symbols, or when it has symbols and no source at all. A source is a land or other permanent that taps for the color, counted by copy and limited to the commander's colors. Fetch lands and cards that make Treasures aren't counted yet. Visitors to a public deck see it too.
 - Correspondence: a chat with the Doctor about the deck, in a panel over the right side of the deck page. The deck stays in view beside it, and a click outside the panel or Esc closes it. It opens on the latest message, and "Show earlier" brings back the rest. A dot on the button says the Doctor is writing an answer, or has one waiting, while the panel is closed. The Doctor only suggests. It shows each card it wants to add or cut, or a commander it wants you to use, as a button under its reply, and nothing changes until you click it. The rules check every suggestion first: legality, color identity, the singleton rule, and the 99-card limit.
 - Import and export decklists, pick printings (kept with the deck, so visitors see them), and track which cards you own.
 - Public and private decks: each deck is public (the default) or private. Anyone can browse the public ones at `/browse` without signing in, and open one to look at the list, with no chat, insights, or editing. A private deck is its owner's alone. Decks show their builder's username, never an email. See [Public and private decks](#public-and-private-decks).
@@ -244,6 +245,8 @@ for t in tests/test_*.py; do uv run python "$t" || break; done
 ```
 
 Each file is a script that prints one line per check and exits with 1 if any fails, so you can also run one on its own, for example `uv run python tests/test_chat.py`.
+
+The one front-end test, for the Manalytics comparison of symbols with sources, is TypeScript that Node runs as it is (Node 22.18 or later): `node tests/test_mana_balance.ts`.
 
 Check the front end's types and lint:
 

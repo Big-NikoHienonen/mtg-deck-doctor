@@ -703,7 +703,7 @@ export default function DeckView() {
                 onAddOne={orSnackbar(async (name) => setDeck(await addCard(deck.id, name)), (name) => `Couldn't add ${name}`)}
                 onRemoveOne={orSnackbar(handleRemoveOne, (name) => `Couldn't remove ${name}`)}
               />
-              <DeckStats stats={stats} />
+              <DeckStats stats={stats} rows={rows} identity={deck.commander_color_identity} />
             </div>
           </div>
         )}

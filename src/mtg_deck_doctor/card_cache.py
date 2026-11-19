@@ -101,6 +101,12 @@ def _valid_cached_info(cached: dict | None) -> dict | None:
     return None
 
 
+def _lacks_mana_production(cached: dict | None) -> bool:
+    """A usable entry that was cached before `producedMana` was recorded. It is fine for everything else, so
+    it is served as it is when Scryfall can't be reached, but a batch lookup tries to complete it."""
+    return bool(cached) and _is_current_schema(cached["info"]) and "producedMana" not in cached["info"]
+
+
 def _load_cache() -> dict:
     if not CACHE_PATH.exists():
         return {}
@@ -147,6 +153,15 @@ def _fetch_from_scryfall(name: str) -> dict:
     return _info_from_card(response.json())
 
 
+def _produced_mana(card: dict) -> list[str]:
+    """The colors this card can tap for, as Scryfall's `produced_mana` letters (W, U, B, R, G, C), sorted.
+    A double-faced card lists them per face, so the faces' are included. A card that makes no mana has []."""
+    produced = set(card.get("produced_mana") or [])
+    for face in card.get("card_faces") or []:
+        produced.update(face.get("produced_mana") or [])
+    return sorted(produced)
+
+
 def _info_from_card(card: dict) -> dict:
     oracle_text = card.get("oracle_text")
     if oracle_text is None and "card_faces" in card:
@@ -168,6 +183,9 @@ def _info_from_card(card: dict) -> dict:
         # tool_loop.review_cuts) rather than all being thrown away at once.
         "manaCost": card.get("mana_cost") or (card.get("card_faces") or [{}])[0].get("mana_cost"),
         "cmc": card.get("cmc"),
+        # Not in _CACHED_INFO_FIELDS either. get_card_info_batch fetches it for an entry without it, and keeps
+        # the old entry when that fetch fails (see _lacks_mana_production).
+        "producedMana": _produced_mana(card),
     }
 
 
@@ -302,7 +320,13 @@ def get_card_info_batch(names: list[str], refresh: bool = False) -> dict:
     read as "half these names are wrong".
     """
     cache = _load_cache()
-    to_fetch = list(dict.fromkeys(name for name in names if refresh or _valid_cached_info(cache.get(name)) is None))
+    to_fetch = list(
+        dict.fromkeys(
+            name
+            for name in names
+            if refresh or _valid_cached_info(cache.get(name)) is None or _lacks_mana_production(cache.get(name))
+        )
+    )
     not_found: set[str] = set()
     fetched: dict[str, dict] = {}
 
@@ -335,5 +359,8 @@ def get_card_info_batch(names: list[str], refresh: bool = False) -> dict:
         valid = _valid_cached_info(fetched.get(name) or cache.get(name))
         if valid is not None:
             info_result[name] = valid
+    # A card that is cached can't be a typo, even if Scryfall has dropped it since (an entry only retried for
+    # `producedMana` would otherwise read as a wrong name).
+    not_found -= info_result.keys()
     failed = [name for name in names if name not in info_result and name not in not_found]
     return {"info": info_result, "not_found": sorted(not_found), "failed": failed}
