@@ -1,0 +1,214 @@
+/* The card's window (CardModal.tsx). On a computer it is a panel with the card on the left and its details on
+   the right. On a phone (up to 640px) it is a full-screen sheet: the name and the close button stay at the top as
+   the details scroll, the card is a smaller picture above them, and the buttons sit in two columns. */
+
+.cm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(20, 14, 8, 0.55);
+}
+
+.cm-panel {
+  display: flex;
+  gap: 24px;
+  width: 100%;
+  max-width: 920px;
+  max-height: 90vh;
+  padding: 24px;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.cm-art {
+  position: relative;
+  flex-shrink: 0;
+  align-self: flex-start;
+  width: 320px;
+}
+
+.cm-details {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cm-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cm-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.cm-add-many {
+  display: flex;
+  gap: 8px;
+}
+
+.cm-note {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* Previous and next card: beside the panel, halfway down. The wrapper takes no part in the layout. */
+.cm-navs {
+  display: contents;
+}
+
+.cm-nav-label {
+  display: none;
+}
+
+/* Previous and next card: beside the panel, halfway down. */
+.cm-nav {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 101;
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.cm-prev {
+  left: 24px;
+}
+
+.cm-next {
+  right: 24px;
+}
+
+@media (max-width: 640px) {
+  .cm-overlay {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .cm-panel {
+    flex-direction: column;
+    gap: 12px;
+    max-width: none;
+    max-height: none;
+    height: 100%;
+    padding: 0 16px 0;
+    border: none;
+    border-radius: 0;
+    overscroll-behavior: contain;
+  }
+
+  /* The details' parts join the panel's own column, so the name can come first and stay put. */
+  .cm-details {
+    display: contents;
+  }
+
+  .cm-head {
+    order: -1;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    margin: 0 -16px;
+    padding: 10px 8px 10px 16px;
+    align-items: center;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .cm-close {
+    flex: none;
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 26px !important;
+  }
+
+  .cm-art {
+    align-self: center;
+    width: min(240px, 66vw);
+  }
+
+  .cm-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .cm-actions > * {
+    min-width: 0;
+  }
+
+  .cm-actions .btn {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .cm-add-many,
+  .cm-note {
+    grid-column: 1 / -1;
+  }
+
+  .cm-add-many .btn {
+    flex: 1;
+  }
+
+  .cm-add-many input {
+    min-height: 44px;
+  }
+
+  .cm-panel .btn,
+  .cm-panel select {
+    min-height: 44px;
+  }
+
+  /* Previous and next are a bar at the bottom of the sheet, in the flow, so it never covers a button. */
+  .cm-navs {
+    display: flex;
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin: auto -16px 0;
+    padding: 10px 16px;
+    gap: 12px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+
+  .cm-nav {
+    position: static;
+    transform: none;
+    flex: 1;
+    min-height: 48px;
+    padding: 0 16px;
+    border-radius: 6px;
+    font-size: 20px;
+  }
+
+  .cm-nav-label {
+    display: inline;
+    font-size: 15px;
+  }
+
+  .cm-prev {
+    margin-right: auto;
+  }
+
+  .cm-next {
+    margin-left: auto;
+  }
+}

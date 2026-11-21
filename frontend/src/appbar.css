@@ -114,22 +114,143 @@ button.app-bar-link {
   outline-offset: 2px;
 }
 
-/* On a phone the name goes, and the links scroll sideways, so the bar stays one line. */
+/* On a computer, the links and the account sit in the bar's own row, in this order: the links, New deck, the
+   account, the theme. Their wrappers take no part in the layout. */
+.app-bar-links,
+.app-bar-account {
+  display: contents;
+}
+
+.app-bar-nav {
+  order: 1;
+}
+
+.app-bar-new {
+  order: 2;
+}
+
+.app-bar-account > * {
+  order: 3;
+}
+
+.app-bar-inner > .tp {
+  order: 4;
+}
+
+.app-bar-menu,
+.app-bar-scrim {
+  display: none;
+}
+
+/* Where the whole row doesn't fit (about 1100px, with the account and Admin), the links and the account become a
+   list under a Menu button. The bar keeps the logo, New deck, the theme, and the button. */
+@media (max-width: 1100px) {
+  .app-bar-logo {
+    margin-right: auto;
+  }
+
+  .app-bar-new {
+    margin-left: 0;
+  }
+
+  .app-bar-inner > .tp {
+    order: 3;
+  }
+
+  .app-bar-menu {
+    order: 4;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    margin-right: -6px;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  .app-bar-menu[aria-expanded="true"] {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--accent);
+  }
+
+  .app-bar-links {
+    display: none;
+  }
+
+  .app-bar-links.is-open {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: var(--app-bar-height);
+    right: 0;
+    z-index: 60;
+    width: min(360px, 100vw);
+    max-height: calc(100dvh - var(--app-bar-height));
+    padding: 8px 12px 14px;
+    overflow-y: auto;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    border-left: 1px solid var(--border);
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  }
+
+  .app-bar-scrim {
+    display: block;
+    position: fixed;
+    inset: var(--app-bar-height) 0 0 0;
+    z-index: 55;
+    background: rgba(8, 6, 18, 0.5);
+  }
+
+  .app-bar-links .app-bar-nav {
+    order: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    overflow: visible;
+  }
+
+  .app-bar-links .app-bar-account {
+    display: flex;
+    flex-direction: column;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+
+  .app-bar-links .app-bar-link {
+    padding: 14px 12px;
+    font-size: 16px;
+    text-align: left;
+  }
+
+  .app-bar-links .app-bar-account > * {
+    order: 0;
+  }
+}
+
+/* On a phone the name goes too, and the bar is a little taller to touch. */
 @media (max-width: 720px) {
   .app-bar-inner {
     padding: 0 12px;
-    gap: 4px;
+    gap: 8px;
   }
 
   .app-bar-name {
     display: none;
   }
 
-  .app-bar-logo {
-    margin-right: 4px;
+  .app-bar-new {
+    height: 38px;
   }
 
-  .app-bar-nav {
-    flex: 1;
+  .app-bar-links.is-open {
+    width: 100vw;
+    border-left: none;
   }
 }

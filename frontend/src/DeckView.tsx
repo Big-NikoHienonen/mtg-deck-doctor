@@ -725,7 +725,7 @@ export default function DeckView() {
 
           {/* Then the supporting detail, with the hover preview beside it. */}
           <div style={{ borderTop: "1px solid var(--border)", margin: "8px 0 28px" }} />
-          <section style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
+          <section className="dv-insights-detail" style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
             <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 28 }}>
               <DeckHealthPanel health={deckHealth} />
               <TopIncludes

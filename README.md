@@ -19,6 +19,8 @@ The backend is FastAPI (Python, managed with uv). The front end is React and Typ
 
 **Home** (`/`) is the landing page: new cards and new commanders from recent sets that are worth a look, with a link to every new card. **My decks** (`/decks`) lists your decks, and holds the swaps the Doctor has worked out. **Card search** (`/search`) searches Scryfall.
 
+**On a phone** the whole app works, and each page has its own phone layout. Under 1100px wide the app bar's links and your account go under a Menu button. Under 640px the card window is a full-screen sheet with the name and close button pinned at the top and Previous and Next along the bottom, Correspondence fills the screen, the deck's More menu is a sheet along the bottom, and card lists show two across. The Insights page drops its hover preview, which needs a mouse. Rows, tabs and buttons are at least 40px tall where the main pointer is a finger, and fields are 16px so a phone's browser doesn't zoom in when you tap one. The rules are in `frontend/src/mobile.css`, `appbar.css`, `cardmodal.css` and `correspondence.css`.
+
 ## Requirements
 
 - Python 3.12 or later and [uv](https://docs.astral.sh/uv/)

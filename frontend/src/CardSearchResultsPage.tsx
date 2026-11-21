@@ -384,7 +384,7 @@ export default function CardSearchResultsPage() {
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 18 }}>
+      <div className="sr-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 18 }}>
         {visibleCards?.map((card) => (
           <div
             key={card.id}

@@ -5,6 +5,7 @@ import CardImage from "./CardImage";
 import FoilSheen from "./FoilSheen";
 import { foilSupport, priceUsdOf, selectPrinting, type SelectedPrinting } from "./printings";
 import { buttonStyle, eyebrowStyle, inputStyle } from "./styles";
+import "./cardmodal.css";
 import { reportFailure } from "./snackbarStore";
 
 // The most copies the "Add more" box adds at once.
@@ -237,35 +238,9 @@ export default function CardModal({
 
   return (
     <>
-      <div
-        onClick={onClose}
-        style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(20, 14, 8, 0.55)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 24,
-          zIndex: 100,
-        }}
-      >
-        <div
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            background: "var(--surface)",
-            border: "1px solid var(--border)",
-            borderRadius: 10,
-            width: "100%",
-            maxWidth: 920,
-            maxHeight: "90vh",
-            overflow: "auto",
-            display: "flex",
-            gap: 24,
-            padding: 24,
-          }}
-        >
-          <div style={{ position: "relative", width: 320, flexShrink: 0, alignSelf: "flex-start" }}>
+      <div onClick={onClose} className="cm-overlay">
+        <div onClick={(e) => e.stopPropagation()} className="cm-panel" role="dialog" aria-modal="true" aria-label={name}>
+          <div className="cm-art">
             <CardImage
               cardId={cardId ?? info?.id}
               printing={printing}
@@ -281,16 +256,10 @@ export default function CardModal({
             />
             {foil && <FoilSheen radius={8} />}
           </div>
-          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 10 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+          <div className="cm-details">
+            <div className="cm-head">
               <div style={{ fontSize: 20, fontWeight: 600 }}>{name}</div>
-              <button
-                onClick={onClose}
-                aria-label="Close"
-                title="Close"
-                className="btn"
-                style={{ ...buttonStyle, padding: "4px 10px" }}
-              >
+              <button onClick={onClose} aria-label="Close" title="Close" className="btn cm-close" style={{ ...buttonStyle, padding: "4px 10px" }}>
                 &times;
               </button>
             </div>
@@ -360,23 +329,14 @@ export default function CardModal({
             )}
 
             {hasDeckContext && (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "flex-start",
-                  gap: 8,
-                  paddingTop: 4,
-                  paddingBottom: 4,
-                }}
-              >
+              <div className="cm-actions">
                 {onAddOne && (
                   <button onClick={handleAddOne} disabled={addingOne} className="btn" style={buttonStyle}>
                     {addingOne ? "Adding…" : "+ Add one"}
                   </button>
                 )}
                 {onAddMany && (
-                  <div style={{ display: "flex", gap: 8 }}>
+                  <div className="cm-add-many">
                     <input
                       type="number"
                       inputMode="numeric"
@@ -428,7 +388,7 @@ export default function CardModal({
                     {togglingFoil ? "Looking up…" : foil ? "✓ Use foil" : "Use foil"}
                   </button>
                 )}
-                {foilNote?.name === name && <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{foilNote.text}</div>}
+                {foilNote?.name === name && <div className="cm-note">{foilNote.text}</div>}
               </div>
             )}
 
@@ -461,58 +421,38 @@ export default function CardModal({
               </div>
             )}
           </div>
+          {onNavigate && (hasPrevious || hasNext) && (
+            <div className="cm-navs">
+              {hasPrevious && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onNavigate("prev");
+                  }}
+                  aria-label="Previous card"
+                  title="Previous card"
+                  className="btn cm-nav cm-prev"
+                >
+                  &lsaquo;<span className="cm-nav-label"> Previous</span>
+                </button>
+              )}
+              {hasNext && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onNavigate("next");
+                  }}
+                  aria-label="Next card"
+                  title="Next card"
+                  className="btn cm-nav cm-next"
+                >
+                  <span className="cm-nav-label">Next </span>&rsaquo;
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
-
-      {onNavigate && hasPrevious && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onNavigate("prev");
-          }}
-          aria-label="Previous card"
-          title="Previous card"
-          className="btn"
-          style={{
-            position: "fixed",
-            left: 24,
-            top: "50%",
-            transform: "translateY(-50%)",
-            zIndex: 101,
-            fontSize: 22,
-            lineHeight: 1,
-            padding: "10px 16px",
-            borderRadius: 999,
-          }}
-        >
-          &lsaquo;
-        </button>
-      )}
-
-      {onNavigate && hasNext && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onNavigate("next");
-          }}
-          aria-label="Next card"
-          title="Next card"
-          className="btn"
-          style={{
-            position: "fixed",
-            right: 24,
-            top: "50%",
-            transform: "translateY(-50%)",
-            zIndex: 101,
-            fontSize: 22,
-            lineHeight: 1,
-            padding: "10px 16px",
-            borderRadius: 999,
-          }}
-        >
-          &rsaquo;
-        </button>
-      )}
 
       {showPrintingPicker && onChangePrinting && (
         <PrintingPicker

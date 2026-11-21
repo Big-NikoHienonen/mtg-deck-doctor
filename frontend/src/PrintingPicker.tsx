@@ -148,6 +148,8 @@ export default function PrintingPicker({
                 gap: 12,
                 textAlign: "left",
                 padding: 8,
+                // A row that can shrink inside the scrolling list ends up shorter than its card picture.
+                flexShrink: 0,
               }}
             >
               <img

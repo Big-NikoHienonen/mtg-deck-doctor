@@ -121,6 +121,7 @@ export default function TopIncludes({
                 </div>
                 <div
                   title={`${card.num_decks.toLocaleString()} of ${card.potential_decks.toLocaleString()} decks`}
+                  className="ti-pct"
                   style={{ width: 120 }}
                 >
                   <div style={{ fontSize: 12, textAlign: "right" }}>{pct}% of decks</div>

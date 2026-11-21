@@ -100,6 +100,7 @@ export default function DeckMenu({
       </button>
       {open && (
         <div
+          className="dv-menu-panel"
           style={{
             position: "absolute",
             top: "100%",

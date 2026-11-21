@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { signOut, useAuth } from "./authStore";
 import Logo from "./Logo";
@@ -20,6 +20,15 @@ export default function AppBar() {
   const showNav = loaded && (!auth.required || auth.signedIn);
   const visitor = loaded && auth.required && !auth.signedIn;
   const [newDeckOpen, setNewDeckOpen] = useState(false);
+  // On a phone the links are a list under a Menu button, not a row; on a computer this is never used.
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMenuOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
 
   // My collection and Search cards are both the card search page, told apart by what it was asked.
   const inCollection = pathname === "/search/results" && new URLSearchParams(search).get("collection") === "1";
@@ -40,26 +49,35 @@ export default function AppBar() {
         </Link>
         {showNav && (
           <>
-            <nav className="app-bar-nav" aria-label="Main">
-              {links.map((l) => (
-                <Link key={l.to} to={l.to} className="app-bar-link" aria-current={l.current ? "page" : undefined}>
-                  {l.label}
-                </Link>
-              ))}
-            </nav>
+            {/* The links and the account. Choosing one closes the menu on a phone. */}
+            <div id="app-bar-links" className={`app-bar-links${menuOpen ? " is-open" : ""}`} onClick={(e) => (e.target as HTMLElement).closest("a, button") && setMenuOpen(false)}>
+              <nav className="app-bar-nav" aria-label="Main">
+                {links.map((l) => (
+                  <Link key={l.to} to={l.to} className="app-bar-link" aria-current={l.current ? "page" : undefined}>
+                    {l.label}
+                  </Link>
+                ))}
+              </nav>
+              {auth.required && (
+                <div className="app-bar-account">
+                  <Link to="/profile" className="app-bar-link" aria-current={pathname === "/profile" ? "page" : undefined} title={auth.email ? `Signed in as ${auth.email}` : undefined}>
+                    {auth.username ?? "Set username"}
+                  </Link>
+                  <button type="button" className="app-bar-link" onClick={() => signOut()}>
+                    Sign out
+                  </button>
+                </div>
+              )}
+            </div>
             <button type="button" className="app-bar-new" onClick={() => setNewDeckOpen(true)}>
               New deck
             </button>
-            {auth.required && (
-              <>
-                <Link to="/profile" className="app-bar-link" aria-current={pathname === "/profile" ? "page" : undefined} title={auth.email ? `Signed in as ${auth.email}` : undefined}>
-                  {auth.username ?? "Set username"}
-                </Link>
-                <button type="button" className="app-bar-link" onClick={() => signOut()}>
-                  Sign out
-                </button>
-              </>
-            )}
+            <button type="button" className="app-bar-menu" aria-label="Menu" aria-expanded={menuOpen} aria-controls="app-bar-links" onClick={() => setMenuOpen((open) => !open)}>
+              <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+                <path d="M3 5.5h14M3 10h14M3 14.5h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
+              </svg>
+            </button>
+            {menuOpen && <div className="app-bar-scrim" onClick={() => setMenuOpen(false)} aria-hidden />}
           </>
         )}
         {visitor && (

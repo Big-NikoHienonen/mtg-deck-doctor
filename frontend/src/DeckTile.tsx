@@ -75,7 +75,7 @@ export default function DeckTile({ deck, onDeleted }: { deck: HubDeck; onDeleted
           }}
           aria-label={`Delete ${deck.title}`}
           title="Delete deck"
-          className="btn btn-danger"
+          className="btn btn-danger dt-delete"
           style={{ position: "absolute", top: 8, right: 8, width: 24, height: 24, borderRadius: "50%", padding: 0, lineHeight: "22px", cursor: "pointer" }}
         >
           &times;

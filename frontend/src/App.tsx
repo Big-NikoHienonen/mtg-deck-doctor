@@ -13,6 +13,7 @@ import Snackbar from "./Snackbar";
 import ProfilePage from "./ProfilePage";
 import CardSearchPage from "./CardSearchPage";
 import CardSearchResultsPage from "./CardSearchResultsPage";
+import "./mobile.css"; // Last, so it wins over the pages' own styles where they overlap.
 
 export default function App() {
   // Asked once, here, since the app bar and every page read the answer.

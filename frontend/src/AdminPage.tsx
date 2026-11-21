@@ -151,39 +151,41 @@ export default function AdminPage() {
             {features.length === 0 ? (
               <p className="ad-empty">No calls in this range.</p>
             ) : (
-              <table className="ad-table">
-                <thead>
-                  <tr>
-                    <th>Feature</th>
-                    <th className="num">Calls</th>
-                    <th className="num">Cost</th>
-                    <th className="num">Share</th>
-                    <th className="num">Per call</th>
-                    <th className="num">Input</th>
-                    <th className="num">Output</th>
-                    <th className="num">Cached</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {features.map(([key, f]) => (
-                    <tr key={key}>
-                      <td>{featureName(key)}</td>
-                      <td className="num">{f.calls}</td>
-                      <td className="num">{usd(f.usd)}</td>
-                      <td className="num">
-                        <span className="ad-share">
-                          <i style={{ width: `${total.usd > 0 ? (f.usd / total.usd) * 100 : 0}%` }} />
-                        </span>
-                        {total.usd > 0 ? `${Math.round((f.usd / total.usd) * 100)}%` : "—"}
-                      </td>
-                      <td className="num">{usd(f.usd / f.calls)}</td>
-                      <td className="num">{tokens(f.input + f.cache_read + f.cache_write)}</td>
-                      <td className="num">{tokens(f.output)}</td>
-                      <td className="num">{cacheShare(f)}</td>
+              <div className="ad-scroll">
+                <table className="ad-table">
+                  <thead>
+                    <tr>
+                      <th>Feature</th>
+                      <th className="num">Calls</th>
+                      <th className="num">Cost</th>
+                      <th className="num">Share</th>
+                      <th className="num">Per call</th>
+                      <th className="num">Input</th>
+                      <th className="num">Output</th>
+                      <th className="num">Cached</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {features.map(([key, f]) => (
+                      <tr key={key}>
+                        <td>{featureName(key)}</td>
+                        <td className="num">{f.calls}</td>
+                        <td className="num">{usd(f.usd)}</td>
+                        <td className="num">
+                          <span className="ad-share">
+                            <i style={{ width: `${total.usd > 0 ? (f.usd / total.usd) * 100 : 0}%` }} />
+                          </span>
+                          {total.usd > 0 ? `${Math.round((f.usd / total.usd) * 100)}%` : "—"}
+                        </td>
+                        <td className="num">{usd(f.usd / f.calls)}</td>
+                        <td className="num">{tokens(f.input + f.cache_read + f.cache_write)}</td>
+                        <td className="num">{tokens(f.output)}</td>
+                        <td className="num">{cacheShare(f)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </section>
 

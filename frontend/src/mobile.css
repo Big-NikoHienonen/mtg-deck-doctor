@@ -1,0 +1,186 @@
+/* What the pages need on a phone, for the parts of the app that are laid out with their own styles. The app bar
+   (appbar.css), the card window (cardmodal.css) and the Correspondence panel (correspondence.css) have their own.
+   Imported last, so these win where the specificity is the same. Many of the rules set what a component sets in
+   its inline style, so they need !important to override it. */
+
+/* ---- the hover preview ---- */
+
+/* The card preview that follows the mouse has no use without one, and its column is room the lists need. */
+@media (max-width: 860px), (hover: none) {
+  .card-preview {
+    display: none;
+  }
+}
+
+/* ---- Insights ---- */
+
+@media (max-width: 640px) {
+  /* A recommended swap: the two cards side by side with an arrow between, then each reason and each button as
+     wide as the card is, one under another. */
+  .swap {
+    padding: 16px 14px 20px !important;
+    margin-bottom: 20px !important;
+  }
+
+  .swap-grid {
+    grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr) !important;
+    column-gap: 8px !important;
+    row-gap: 12px !important;
+  }
+
+  .swap-arrow {
+    font-size: 26px !important;
+  }
+
+  .swap-caption > div:first-child {
+    font-size: 15px !important;
+  }
+
+  .swap-reason {
+    grid-column: 1 / -1;
+  }
+
+  .swap-spacer {
+    display: none;
+  }
+
+  .swap-btn {
+    grid-column: 1 / -1;
+    max-width: none !important;
+  }
+
+  /* "How balanced is the deck?": the name and the count on the first line, the verdict and "Show cards" under them. */
+  .dh-row {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 12px;
+    row-gap: 4px;
+    align-items: baseline;
+  }
+
+  .dh-status {
+    min-width: 0 !important;
+    text-align: left !important;
+  }
+
+  .dh-row > button {
+    justify-self: end;
+  }
+
+  /* Popular cards: a narrower bar leaves the name room. */
+  .ti-pct {
+    width: 80px !important;
+  }
+}
+
+/* ---- menus ---- */
+
+@media (max-width: 640px) {
+  /* The deck's More menu is a sheet along the bottom of the screen. Under its button it would run off the left edge,
+     as the button is at the left of the row, and it would sit under the deck's count bar. */
+  .dv-menu-panel {
+    position: fixed !important;
+    top: auto !important;
+    right: 12px !important;
+    bottom: 12px;
+    left: 12px;
+    z-index: 70 !important;
+    min-width: 0 !important;
+    max-height: calc(100dvh - 90px);
+    margin: 0 !important;
+    overflow-y: auto;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.55);
+  }
+
+  .dv-menu-panel .menu-item {
+    min-height: 48px;
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 640px) {
+  /* The theme picker is pinned to the screen. Under its button, which is near the right edge, it would run off the
+     left edge. */
+  .tp-panel {
+    position: fixed;
+    top: calc(var(--app-bar-height) + 8px);
+    right: 12px;
+    left: 12px;
+    width: auto;
+    max-height: calc(100dvh - var(--app-bar-height) - 20px);
+  }
+}
+
+/* ---- card search ---- */
+
+@media (max-width: 640px) {
+  /* Two cards across, not one: a page of results is long enough. */
+  .sr-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+}
+
+/* ---- touch ---- */
+
+/* A finger is about 44px across. Rows, tabs and buttons are brought up toward that where a page is used by touch,
+   which is a phone or anything else whose main pointer is coarse. */
+@media (max-width: 640px), (pointer: coarse) {
+  .btn {
+    min-height: 40px;
+  }
+
+  .dv-action {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+  }
+
+  .dv-back {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+  }
+
+  .dv-owner {
+    min-height: 40px;
+  }
+
+  .dv-select {
+    min-height: 40px;
+  }
+
+  .dv-row {
+    min-height: 40px;
+  }
+
+  /* The row's menu button keeps its look; a larger area around it takes the touch. */
+  .dv-act {
+    position: relative;
+  }
+
+  .dv-act::after {
+    content: "";
+    position: absolute;
+    inset: -9px;
+  }
+
+  .tp-trigger {
+    height: 38px;
+  }
+
+  /* The menu that opens from a row of the deck list. */
+  .dv-menu button {
+    min-height: 44px;
+  }
+
+  /* The × on a deck tile. */
+  .dt-delete {
+    top: 6px !important;
+    right: 6px !important;
+    width: 40px !important;
+    height: 40px !important;
+    font-size: 24px;
+    line-height: 38px !important;
+  }
+}

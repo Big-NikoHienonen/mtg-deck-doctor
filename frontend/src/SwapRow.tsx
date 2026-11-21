@@ -15,7 +15,7 @@ type Side = {
 function CardFrame({ side, tone, onHover }: { side: Side; tone: keyof typeof TONES; onHover: () => void }) {
   const { color, glow, label } = TONES[tone];
   return (
-    <div style={{ position: "relative", width: "100%", maxWidth: CARD_MAX_WIDTH }} onMouseEnter={onHover}>
+    <div className="swap-card" style={{ position: "relative", width: "100%", maxWidth: CARD_MAX_WIDTH }} onMouseEnter={onHover}>
       <CardImage
         cardId={side.id}
         version="normal"
@@ -53,7 +53,7 @@ function CardFrame({ side, tone, onHover }: { side: Side; tone: keyof typeof TON
 
 function Caption({ side, extra }: { side: Side; extra?: ReactNode }) {
   return (
-    <div style={{ width: "100%", maxWidth: CARD_MAX_WIDTH, textAlign: "center", minWidth: 0 }}>
+    <div className="swap-caption" style={{ width: "100%", maxWidth: CARD_MAX_WIDTH, textAlign: "center", minWidth: 0 }}>
       <div style={{ fontSize: 17, fontWeight: 600, lineHeight: 1.25 }}>{side.name}</div>
       <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2, minHeight: 18 }}>
         {side.stat}
@@ -68,7 +68,7 @@ function Caption({ side, extra }: { side: Side; extra?: ReactNode }) {
 function Reason({ tone, children }: { tone: keyof typeof TONES; children: ReactNode }) {
   const { color } = TONES[tone];
   return (
-    <div style={{ width: "100%", borderLeft: `4px solid ${color}`, paddingLeft: 14 }}>
+    <div className="swap-reason" style={{ width: "100%", borderLeft: `4px solid ${color}`, paddingLeft: 14 }}>
       <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.1em", color, marginBottom: 4 }}>
         {tone === "cut" ? "WHY CUT IT" : "WHY ADD IT"}
       </div>
@@ -118,6 +118,7 @@ export default function SwapRow({
 }) {
   return (
     <div
+      className="swap"
       style={{
         background: "var(--surface)",
         border: "1px solid var(--border)",
@@ -133,6 +134,7 @@ export default function SwapRow({
       </div>
 
       <div
+        className="swap-grid"
         style={{
           display: "grid",
           gridTemplateColumns: "minmax(0, 1fr) 56px minmax(0, 1fr)",
@@ -145,6 +147,7 @@ export default function SwapRow({
         <CardFrame side={cut} tone="cut" onHover={() => onHoverCard(cut.name, cut.id)} />
         <div
           aria-hidden
+          className="swap-arrow"
           style={{ alignSelf: "center", fontSize: 40, lineHeight: 1, color: "var(--text-muted)", paddingBottom: 4 }}
         >
           →
@@ -159,23 +162,23 @@ export default function SwapRow({
         />
 
         <Reason tone="cut">{reasonCut}</Reason>
-        <div />
+        <div className="swap-spacer" />
         <Reason tone="add">{reasonAdd}</Reason>
 
         <button
           onClick={onKeep}
           disabled={busy}
-          className="btn"
+          className="btn swap-btn"
           title="Never suggest cutting this card"
           style={{ ...buttonStyle, width: "100%", maxWidth: CARD_MAX_WIDTH }}
         >
           Keep this card
         </button>
-        <div />
+        <div className="swap-spacer" />
         <button
           onClick={onSwap}
           disabled={busy}
-          className="btn btn-positive"
+          className="btn btn-positive swap-btn"
           style={{ ...buttonStyle, width: "100%", maxWidth: CARD_MAX_WIDTH, fontWeight: 600 }}
         >
           {busy ? "Swapping…" : "Make this swap"}

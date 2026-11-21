@@ -25,8 +25,8 @@ export default function DeckHealthPanel({ health }: { health: DeckHealth }) {
           const open = expanded === m.key;
           return (
             <div key={m.key} style={{ borderBottom: "1px solid var(--border)", padding: "8px 0" }}>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-                <div style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>{m.label}</div>
+              <div className="dh-row" style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+                <div className="dh-label" style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>{m.label}</div>
                 <div style={{ fontSize: 14 }}>
                   {m.count}
                   <span style={{ color: "var(--text-muted)", fontSize: 12 }}>
@@ -34,7 +34,7 @@ export default function DeckHealthPanel({ health }: { health: DeckHealth }) {
                     / {m.target[0]}–{m.target[1]}
                   </span>
                 </div>
-                <div style={{ fontSize: 12, color: status.color, minWidth: 110, textAlign: "right" }}>{status.label}</div>
+                <div className="dh-status" style={{ fontSize: 12, color: status.color, minWidth: 110, textAlign: "right" }}>{status.label}</div>
                 {m.key !== "lands" && (
                   <button
                     onClick={() => setExpanded(open ? null : m.key)}
