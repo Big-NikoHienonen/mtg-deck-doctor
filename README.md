@@ -19,7 +19,7 @@ The backend is FastAPI (Python, managed with uv). The front end is React and Typ
 
 **Home** (`/`) is the landing page: new cards and new commanders from recent sets that are worth a look, with a link to every new card. **My decks** (`/decks`) lists your decks, and holds the swaps the Doctor has worked out. **Card search** (`/search`) searches Scryfall.
 
-**On a phone** the whole app works, and each page has its own phone layout. Under 1100px wide the app bar's links and your account go under a Menu button. Under 640px the card window is a full-screen sheet with the name and close button pinned at the top and Previous and Next along the bottom, Correspondence fills the screen, the deck's More menu is a sheet along the bottom, and card lists show two across. The Insights page drops its hover preview, which needs a mouse. Rows, tabs and buttons are at least 40px tall where the main pointer is a finger, and fields are 16px so a phone's browser doesn't zoom in when you tap one. The rules are in `frontend/src/mobile.css`, `appbar.css`, `cardmodal.css` and `correspondence.css`.
+**On a phone** the whole app works, and each page has its own phone layout. Under 1100px wide the app bar's links and your account go under a Menu button. Under 640px the card window is a full-screen sheet with the name and close button pinned at the top and Previous and Next along the bottom (or swipe the sheet left for the next card and right for the previous one), Correspondence fills the screen, the deck's More menu is a sheet along the bottom, and card lists show two across. The Insights page drops its hover preview, which needs a mouse. Rows, tabs and buttons are at least 40px tall where the main pointer is a finger, and fields are 16px so a phone's browser doesn't zoom in when you tap one. The rules are in `frontend/src/mobile.css`, `appbar.css`, `cardmodal.css` and `correspondence.css`.
 
 ## Requirements
 
@@ -248,7 +248,7 @@ for t in tests/test_*.py; do uv run python "$t" || break; done
 
 Each file is a script that prints one line per check and exits with 1 if any fails, so you can also run one on its own, for example `uv run python tests/test_chat.py`.
 
-The one front-end test, for the Manalytics comparison of symbols with sources, is TypeScript that Node runs as it is (Node 22.18 or later): `node tests/test_mana_balance.ts`.
+The two front-end tests, for the Manalytics comparison of symbols with sources and for the rules of the card window's swipe, are TypeScript that Node runs as it is (Node 22.18 or later): `node tests/test_mana_balance.ts` and `node tests/test_swipe.ts`.
 
 Check the front end's types and lint:
 

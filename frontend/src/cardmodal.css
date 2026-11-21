@@ -26,6 +26,12 @@
   border-radius: 10px;
 }
 
+/* Up and down is the browser's, for scrolling the card's details and for pinching; sideways is the swipe to the
+   next card (useSwipe.ts). */
+.cm-panel {
+  touch-action: pan-y pinch-zoom;
+}
+
 .cm-art {
   position: relative;
   flex-shrink: 0;

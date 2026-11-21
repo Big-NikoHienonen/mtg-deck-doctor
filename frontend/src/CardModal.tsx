@@ -7,6 +7,7 @@ import { foilSupport, priceUsdOf, selectPrinting, type SelectedPrinting } from "
 import { buttonStyle, eyebrowStyle, inputStyle } from "./styles";
 import "./cardmodal.css";
 import { reportFailure } from "./snackbarStore";
+import { useSwipe } from "./useSwipe";
 
 // The most copies the "Add more" box adds at once.
 const MAX_ADD_MANY = 40;
@@ -89,6 +90,18 @@ export default function CardModal({
   // one, as its placeholder says.
   const [quantityText, setQuantityText] = useState("");
   const quantity = Math.min(MAX_ADD_MANY, Math.max(1, parseInt(quantityText, 10) || 1));
+  // A swipe to the left goes to the next card, to the right to the previous one (see useSwipe).
+  const swipe = useSwipe({
+    canPrev: !!onNavigate && !!hasPrevious,
+    canNext: !!onNavigate && !!hasNext,
+    onPrev: () => onNavigate?.("prev"),
+    onNext: () => onNavigate?.("next"),
+  });
+  // Another card starts at its top, not where the last one was scrolled to.
+  useEffect(() => {
+    swipe.ref.current?.scrollTo(0, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name]);
   const [addingOne, setAddingOne] = useState(false);
   const [addingMany, setAddingMany] = useState(false);
   const [addMessage, setAddMessage] = useState<string | null>(null);
@@ -239,7 +252,7 @@ export default function CardModal({
   return (
     <>
       <div onClick={onClose} className="cm-overlay">
-        <div onClick={(e) => e.stopPropagation()} className="cm-panel" role="dialog" aria-modal="true" aria-label={name}>
+        <div ref={swipe.ref} {...swipe.handlers} onClick={(e) => e.stopPropagation()} className="cm-panel" role="dialog" aria-modal="true" aria-label={name}>
           <div className="cm-art">
             <CardImage
               cardId={cardId ?? info?.id}
